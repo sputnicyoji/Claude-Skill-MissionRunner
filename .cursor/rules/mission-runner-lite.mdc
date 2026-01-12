@@ -1,0 +1,98 @@
+---
+description: |
+  Mission Runner Lite - Quick reference for automated multi-file development.
+  Use this lighter version when you're familiar with the workflow.
+  For full documentation, see mission-runner.mdc
+globs:
+  - "**/*"
+alwaysApply: false
+---
+
+# Mission Runner Lite
+
+> Quick reference for PIR (Plan-Iterate-Resolve) workflow
+
+## Core Rules
+
+```
+1. Read-Before-Decide     - ALWAYS read _planning/mission_plan.md first
+2. One Task at a Time     - Execute single task per iteration
+3. Update Immediately     - Mark [x] right after completion
+4. Record All Failures    - Append errors to mission_notes.md
+5. Ask When Unsure        - Confidence < 3? Ask user
+```
+
+## Quick Start
+
+```bash
+# Phase 0: Initialize
+mkdir -p _planning
+# Create mission_plan.md (tasks + criteria)
+# Create mission_notes.md (empty)
+
+# Each Iteration
+1. Read mission_plan.md -> confirm next task
+2. Confidence check (4 dimensions, 1-5 scale)
+3. Execute one task
+4. Validate (compile/lint/test)
+5. If fail -> reflect -> fix or record
+6. Update Progress Log
+
+# Completion
+<promise>Mission Accomplished</promise>
+```
+
+## Confidence Check
+
+| Dimension | Question |
+|-----------|----------|
+| Understanding | Requirements clear? |
+| Certainty | Approach unique? |
+| Clarity | APIs identified? |
+| Risk | Side effects controllable? |
+
+- >= 4: Execute
+- 3-4: Record concerns, execute
+- < 3: Ask user
+
+## Self-Reflection (On Failure)
+
+```
+1. Why failed? (root cause)
+2. How to fix? (specific solution)
+3. Similar pitfalls? (learn by analogy)
+
+Strategy:
+- Simple error -> fix immediately (max 2 retries)
+- Medium error -> record, next iteration
+- Complex error -> ask user
+```
+
+## File Structure
+
+```
+_planning/
+├── mission_plan.md    # Tasks + progress
+├── mission_notes.md   # Findings + failures
+└── workflow_state.json # State (optional)
+```
+
+## State Machine (Advisory)
+
+```
+init -> read -> check -> execute -> validate -> checkpoint
+                  |                     |
+                  v (low)               v (fail)
+               ask_user          self_reflection
+```
+
+Can deviate when needed - record reason to notes.
+
+## Completion Criteria
+
+Output `<promise>Mission Accomplished</promise>` when:
+1. All tasks [x] marked
+2. Validation passes
+3. Constraints followed
+
+If incomplete at max iterations: report remaining tasks, no promise.

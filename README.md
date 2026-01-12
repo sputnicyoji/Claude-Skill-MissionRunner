@@ -1,0 +1,194 @@
+# Mission Runner
+
+> **Automated Multi-File Development with PIR (Plan-Iterate-Resolve) Methodology**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+Mission Runner is an AI coding assistant skill that enables autonomous execution of complex, multi-file development tasks. It combines task planning, iterative execution, and self-reflection to deliver high-quality results.
+
+## Key Features
+
+- **Filesystem as Memory** - Persistent state using local `_planning/` files, not context window
+- **Read-Before-Decide** - Always re-read the plan before each decision to prevent goal drift
+- **Failures as Data** - All errors recorded for learning in subsequent iterations
+- **Confidence Check** - 4-dimension assessment before each task execution
+- **Self-Reflection (Reflexion)** - Semantic gradient learning from failures
+- **Advisory State Machine** - Guided workflow with escape hatch for flexibility
+
+## When to Use
+
+| Scenario | Example |
+|----------|---------|
+| New module development | Create complete feature with Data/Service/UI layers |
+| Multi-file implementation | Add feature requiring 3+ files |
+| Cross-module features | Implement functionality spanning multiple systems |
+| Large refactoring | Rename/reorganize module structure |
+
+## When NOT to Use
+
+- Single file edits
+- Simple bug fixes
+- Research/Q&A tasks
+- Configuration changes
+
+## Installation
+
+### For Claude Code
+
+Copy the `SKILL.md` file to your project's `.claude/skills/mission-runner/` directory:
+
+```bash
+mkdir -p .claude/skills/mission-runner
+cp SKILL.md .claude/skills/mission-runner/
+cp -r references .claude/skills/mission-runner/
+```
+
+### For Cursor
+
+Copy the Cursor-specific files:
+
+```bash
+# Option 1: Use .cursorrules (root-level)
+cp .cursorrules /path/to/your/project/
+
+# Option 2: Use .cursor/rules/ (modular)
+mkdir -p /path/to/your/project/.cursor/rules
+cp .cursor/rules/mission-runner.mdc /path/to/your/project/.cursor/rules/
+# Or use the lite version:
+cp .cursor/rules/mission-runner-lite.mdc /path/to/your/project/.cursor/rules/
+```
+
+## Quick Start
+
+### Basic Usage
+
+```
+[MISSION RUNNER - PIR MODE]
+
+## Task
+Add user authentication feature to the application
+
+## Phase 0: Initialization
+1. mkdir -p _planning
+2. Create mission_plan.md and mission_notes.md
+3. Break down tasks into Phases
+
+## Iteration Rules
+1. Read-Before-Decide: Read _planning/mission_plan.md
+2. Execute: Execute next [ ] task, mark [x]
+3. Validate: Build/lint/test check
+4. Checkpoint: Update Progress Log
+
+## Completion Criteria
+<promise>Mission Accomplished</promise>
+```
+
+### File Structure Created
+
+```
+_planning/
+├── mission_plan.md       # Tasks + success criteria + progress
+├── mission_notes.md      # Findings + decisions + failures
+└── workflow_state.json   # State machine position (optional)
+```
+
+## Core Workflow
+
+```
+Phase 0: Initialize
+├── Create _planning/ directory
+├── Create mission_plan.md (tasks + success criteria)
+└── Create mission_notes.md (empty notes)
+
+Each Iteration:
+├── Step 1: Read-Before-Decide (anchor to goal)
+├── Step 1.5: Confidence Check (4 dimensions)
+├── Step 2: Execute (one task only)
+├── Step 3: Validate (compile/lint/test)
+├── Step 3.5: Self-Reflection (if validation fails)
+└── Step 4: Checkpoint (update progress)
+
+Completion:
+└── Output: <promise>Mission Accomplished</promise>
+```
+
+## Confidence Check Protocol
+
+Before executing each task, evaluate on 4 dimensions (1-5 scale):
+
+| Dimension | Question |
+|-----------|----------|
+| Task Understanding | Are requirements fully clear? |
+| Solution Certainty | Is approach unique and clear? |
+| Dependency Clarity | Are APIs/modules identified? |
+| Risk Assessment | Are side effects controllable? |
+
+Decision based on average:
+- **>= 4 (Green)**: Execute directly
+- **3-4 (Yellow)**: Record concerns, then execute
+- **< 3 (Red)**: Ask user for clarification
+
+## Self-Reflection (Reflexion)
+
+When validation fails, generate reflection before retrying:
+
+1. **Why did it fail?** (root cause)
+2. **How to fix?** (specific solution)
+3. **Similar pitfalls?** (learn by analogy)
+
+Error classification:
+- **Simple** (typo/import): Fix immediately (max 2 retries)
+- **Medium** (logic): Record, handle next iteration
+- **Complex** (architecture): Ask user
+
+## State Machine (Advisory Mode)
+
+```
+init -> read_before_decide -> confidence_check -> execute -> validate -> checkpoint
+                                    |                           |
+                                    v (low)                     v (fail)
+                                ask_user              self_reflection
+```
+
+The state machine is **advisory, not mandatory**. Agent may deviate when needed - just record the reason.
+
+## Theoretical Foundations
+
+Mission Runner incorporates concepts from:
+
+- **[Manus AI Context Engineering](https://manus.im/blog/Context-Engineering-for-AI-Agents-Lessons-from-Building-Manus)** - Filesystem memory, attention manipulation
+- **[Reflexion (NeurIPS 2023)](https://arxiv.org/abs/2303.11366)** - Semantic gradient self-reflection
+- **[CrewAI Flows](https://docs.crewai.com/concepts/flows)** - Deterministic skeleton + autonomous pockets
+- **[LangGraph State Machine](https://www.langchain.com/langgraph)** - Explicit state machine definition
+
+## Repository Structure
+
+```
+Claude-Skill-MissionRunner/
+├── SKILL.md                          # Claude Code skill (main)
+├── references/
+│   └── prompt-template.md            # Detailed prompt templates
+├── .cursorrules                      # Cursor root-level rules
+├── .cursor/rules/
+│   ├── mission-runner.mdc            # Cursor full version
+│   └── mission-runner-lite.mdc       # Cursor quick reference
+├── examples/
+│   └── _planning/                    # Example planning files
+├── README.md
+├── LICENSE
+└── CHANGELOG.md
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Anthropic for Claude Code
+- The AI agent research community
+- All contributors and users
