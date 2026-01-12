@@ -3,17 +3,22 @@
 > **Automated Multi-File Development with PIR (Plan-Iterate-Resolve) Methodology**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-Compatible-blueviolet)](https://claude.ai/code)
+[![Cursor](https://img.shields.io/badge/Cursor-Compatible-blue)](https://cursor.sh)
+[![GitHub stars](https://img.shields.io/github/stars/sputnicyoji/Claude-Skill-MissionRunner?style=social)](https://github.com/sputnicyoji/Claude-Skill-MissionRunner)
 
 Mission Runner is an AI coding assistant skill that enables autonomous execution of complex, multi-file development tasks. It combines task planning, iterative execution, and self-reflection to deliver high-quality results.
 
 ## Key Features
 
-- **Filesystem as Memory** - Persistent state using local `_planning/` files, not context window
-- **Read-Before-Decide** - Always re-read the plan before each decision to prevent goal drift
-- **Failures as Data** - All errors recorded for learning in subsequent iterations
-- **Confidence Check** - 4-dimension assessment before each task execution
-- **Self-Reflection (Reflexion)** - Semantic gradient learning from failures
-- **Advisory State Machine** - Guided workflow with escape hatch for flexibility
+| Feature | Description |
+|---------|-------------|
+| **Filesystem as Memory** | Persistent state using local `_planning/` files, not context window |
+| **Read-Before-Decide** | Always re-read the plan before each decision to prevent goal drift |
+| **Failures as Data** | All errors recorded for learning in subsequent iterations |
+| **Confidence Check** | 4-dimension assessment before each task execution |
+| **Self-Reflection (Reflexion)** | Semantic gradient learning from failures (NeurIPS 2023) |
+| **Advisory State Machine** | Guided workflow with escape hatch for flexibility |
 
 ## When to Use
 
@@ -35,27 +40,28 @@ Mission Runner is an AI coding assistant skill that enables autonomous execution
 
 ### For Claude Code
 
-Copy the `SKILL.md` file to your project's `.claude/skills/mission-runner/` directory:
-
 ```bash
+# Clone the repository
+git clone https://github.com/sputnicyoji/Claude-Skill-MissionRunner.git
+
+# Copy to your project
 mkdir -p .claude/skills/mission-runner
-cp SKILL.md .claude/skills/mission-runner/
-cp -r references .claude/skills/mission-runner/
+cp Claude-Skill-MissionRunner/SKILL.md .claude/skills/mission-runner/
+cp -r Claude-Skill-MissionRunner/references .claude/skills/mission-runner/
 ```
 
 ### For Cursor
 
-Copy the Cursor-specific files:
-
 ```bash
-# Option 1: Use .cursorrules (root-level)
-cp .cursorrules /path/to/your/project/
+# Option 1: Use .cursorrules (root-level, recommended)
+cp Claude-Skill-MissionRunner/.cursorrules /path/to/your/project/
 
 # Option 2: Use .cursor/rules/ (modular)
 mkdir -p /path/to/your/project/.cursor/rules
-cp .cursor/rules/mission-runner.mdc /path/to/your/project/.cursor/rules/
-# Or use the lite version:
-cp .cursor/rules/mission-runner-lite.mdc /path/to/your/project/.cursor/rules/
+cp Claude-Skill-MissionRunner/.cursor/rules/mission-runner.mdc /path/to/your/project/.cursor/rules/
+
+# Or use the lite version for quick reference:
+cp Claude-Skill-MissionRunner/.cursor/rules/mission-runner-lite.mdc /path/to/your/project/.cursor/rules/
 ```
 
 ## Quick Start
@@ -154,12 +160,14 @@ The state machine is **advisory, not mandatory**. Agent may deviate when needed 
 
 ## Theoretical Foundations
 
-Mission Runner incorporates concepts from:
+Mission Runner incorporates cutting-edge concepts from AI agent research:
 
-- **[Manus AI Context Engineering](https://manus.im/blog/Context-Engineering-for-AI-Agents-Lessons-from-Building-Manus)** - Filesystem memory, attention manipulation
-- **[Reflexion (NeurIPS 2023)](https://arxiv.org/abs/2303.11366)** - Semantic gradient self-reflection
-- **[CrewAI Flows](https://docs.crewai.com/concepts/flows)** - Deterministic skeleton + autonomous pockets
-- **[LangGraph State Machine](https://www.langchain.com/langgraph)** - Explicit state machine definition
+| Source | Concept |
+|--------|---------|
+| [Manus AI](https://manus.im/blog/Context-Engineering-for-AI-Agents-Lessons-from-Building-Manus) | Filesystem memory, attention manipulation |
+| [Reflexion (NeurIPS 2023)](https://arxiv.org/abs/2303.11366) | Semantic gradient self-reflection |
+| [CrewAI Flows](https://docs.crewai.com/concepts/flows) | Deterministic skeleton + autonomous pockets |
+| [LangGraph](https://www.langchain.com/langgraph) | Explicit state machine definition |
 
 ## Repository Structure
 
@@ -183,12 +191,25 @@ Claude-Skill-MissionRunner/
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
-- Anthropic for Claude Code
+- [Anthropic](https://anthropic.com) for Claude Code
+- [Cursor](https://cursor.sh) for the AI-powered editor
 - The AI agent research community
 - All contributors and users
+
+---
+
+<p align="center">
+  <sub>Built with PIR methodology for autonomous AI development</sub>
+</p>
