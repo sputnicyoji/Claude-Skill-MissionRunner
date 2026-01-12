@@ -7,6 +7,9 @@
 [![Cursor](https://img.shields.io/badge/Cursor-Compatible-blue)](https://cursor.sh)
 [![GitHub stars](https://img.shields.io/github/stars/sputnicyoji/Claude-Skill-MissionRunner?style=social)](https://github.com/sputnicyoji/Claude-Skill-MissionRunner)
 
+
+**English** | [简体中文](README_zh-CN.md) | [日本語](README_ja.md)
+
 Mission Runner is an AI coding assistant skill that enables autonomous execution of complex, multi-file development tasks. It combines task planning, iterative execution, and self-reflection to deliver high-quality results.
 
 ## Key Features
