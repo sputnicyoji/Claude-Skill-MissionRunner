@@ -37,31 +37,42 @@
                     Phase 0: Initialization
 ---------------------------------------------------------------
 
-1. Create planning directory: mkdir -p _planning
+1. Parse user task description.
 
-2. Create _planning/mission_plan.md:
+2. Determine {project-slug} (cross-mission learning layer namespace):
+   - In git repo: `git rev-parse --show-toplevel` last segment -> lowercase + kebab-case
+   - Not in git: `pwd` basename -> lowercase + kebab-case
+   - Example: E:\Yoji\Prism-OS -> prism-os
+
+3. Glob historical lessons (cross-mission learning layer, consumer side):
+   - LessonsDir = ~/.claude/mission-archive/{slug}/lessons/
+   - If dir doesn't exist -> skip (first mission for this project, no history to read)
+   - Otherwise read all *.md frontmatter:
+     * Extract each file's keywords[] and description
+     * Match against current task description (case-insensitive substring)
+     * Hit threshold: task contains >=1 keyword OR description token
+   - Cache up to 5 hits with full lesson body
+
+4. Create planning directory: mkdir -p _planning
+
+5. Create _planning/mission_plan.md:
    - Objective: Extract from task description
    - Success Criteria: Specific verifiable completion criteria
+   - **## Prior Lessons** (NEW - populated from step 3):
+     * If step 3 had hits: paste full lesson body + filename + Source reference
+     * If no hits: write "(no historical lessons matched this task)"
    - Phases: Phased task list
    - Progress Log: Empty table
 
-3. Create _planning/mission_notes.md:
-   - Research Findings: Empty
-   - Decisions Made: Empty
-   - Failures & Learnings: Empty
-   - Self-Reflections: Empty
-   - Clarifications: Empty
-   - Open Questions: Empty
+6. Create _planning/mission_notes.md with all standard sections (all empty at init):
+   - Research Findings, Decisions Made, Failures & Learnings
+   - Self-Reflections, Compliance Checks, Clarifications
+   - Open Questions, Distilled Lessons, Audit Trail
 
-4. Create _planning/workflow_state.json (optional):
-   {
-     "current_state": "init",
-     "iteration": 0,
-     "phase": "initialization"
-   }
-
-5. Create _planning/agent_outputs/ directory (optional):
-   mkdir -p _planning/agent_outputs
+Optional:
+- Create _planning/workflow_state.json:
+   { "current_state": "init", "iteration": 0, "phase": "initialization" }
+- Create _planning/agent_outputs/ directory: mkdir -p _planning/agent_outputs
 
 ---------------------------------------------------------------
                     Iteration Rules (Must Execute Each Iteration)
@@ -72,10 +83,17 @@ Read _planning/mission_plan.md
 - Confirm: What is the Objective?
 - Confirm: Which Phase are we in?
 - Confirm: What is the next incomplete [ ] task?
+- **Check `## Prior Lessons` section** (populated by Phase 0 step 3):
+  - If >=1 hit: assess whether each lesson's applicability condition is triggered
+    by the current task. If triggered, feed lesson content into Step 1.5
+    Confidence Check as a signal (if a lesson warned about this trap,
+    Solution Certainty / Risk Assessment scores should drop accordingly).
+  - If no hits / no section: proceed without historical context.
 
 Read _planning/mission_notes.md
 - Check: What failures/learnings from last iteration?
 - Check: Previous Clarifications records
+- Check: Compliance Checks (verdict != pass) / Audit Trail
 
 ### Step 1.5: Confidence Check
 Evaluate current task on 4 dimensions (1-5 scale):
@@ -385,6 +403,19 @@ Implement order reward distribution feature, involving Order + Reward modules
 - Module path: src/modules/xxx/
 - Architecture layers: Data/Service/UI
 - Related constraints: project-specific rules
+
+## Prior Lessons
+[Phase 0 step 3 output — lessons globbed from ~/.claude/mission-archive/{slug}/lessons/]
+[If no hits at init: "(no historical lessons matched this task)"]
+
+### lesson: refund-flow-architecture (2026-05-23)
+> From mission-archive, hit at Phase 0. Read in Step 1 Read-Before-Decide.
+
+**Lesson (≤150 字):**
+退款的状态机和 Order 状态机正交（退款审批 / 部分退款 / 退款失败重试 vs 订单创建 / 支付 / 发货）；强行塞进 OrderService 会让单一职责崩溃。下次遇到"X 是 Y 的子流程？"问题时，先画状态机：正交 → 独立 Service；嵌套 → 子方法即可。
+
+**Source:** 2026-05-23 mission Iter 3 Decisions Made
+**File:** ~/.claude/mission-archive/prism-os/lessons/2026-05-23-refund-flow-architecture.md
 
 ## Phases
 

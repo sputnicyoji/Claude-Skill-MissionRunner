@@ -678,11 +678,31 @@ keywords: [关键词1, 关键词2, ...]
 
 Phase 0: Initialization (初始化)
 ├── 1. 解析用户任务描述
-├── 2. 创建 _planning/ 目录:
-│      mkdir -p _planning
-├── 3. 创建 mission_plan.md (任务计划)
-├── 4. 创建 mission_notes.md (空笔记)
-└── 5. 启动迭代循环 (默认 3 次迭代)
+│
+├── 2. 确定 project-slug (跨任务学习层的命名空间):
+│      在 git 仓库内: `git rev-parse --show-toplevel` 末段 -> 小写 + kebab-case
+│      不在 git 仓库内: `pwd` 末段 -> 小写 + kebab-case
+│      示例: E:\Yoji\Prism-OS -> prism-os
+│
+├── 3. Glob 历史 lessons (跨任务学习层消费端):
+│      LessonsDir = ~/.claude/mission-archive/{slug}/lessons/
+│      ├─ 目录不存在 -> 跳过此步（首次 mission 情形，无历史可读）
+│      └─ 目录存在 -> 读取所有 *.md 的 frontmatter:
+│           - 提取每个文件的 keywords[] 与 description
+│           - 与当前任务描述做关键词匹配 (大小写不敏感、子串 OK)
+│           - 命中阈值: 任务描述中出现 ≥1 个 keyword 或 description 关键词
+│      把命中的 lesson (最多 5 条) 完整内容缓存待用
+│
+├── 4. 创建 _planning/ 目录: mkdir -p _planning
+│
+├── 5. 创建 mission_plan.md (任务计划):
+│      包含新增 ## Prior Lessons 段:
+│      ├─ Step 3 命中: 列出 lesson 文件名 + 完整 lesson 正文 + Source 引用
+│      └─ Step 3 未命中: 写 "(no historical lessons matched this task)"
+│
+├── 6. 创建 mission_notes.md (空笔记，含所有标准段)
+│
+└── 7. 启动迭代循环 (默认 3 次迭代)
 
 ---------------------------------------------------------------
 
@@ -693,9 +713,17 @@ Phase 0: Initialization (初始化)
 │  - 确认: Objective 是什么？                                   │
 │  - 确认: 当前在哪个 Phase？                                   │
 │  - 确认: 下一个未完成 [ ] 任务是什么？                         │
+│  - **检查 ## Prior Lessons 段** (Phase 0 step 3 命中产物):    │
+│      ├─ 命中 ≥ 1 条 -> 评估每条 lesson 是否触发其适用条件     │
+│      │                  触发的 lesson 内容作为 Step 1.5       │
+│      │                  Confidence Check 的输入信号           │
+│      │                  (如果 lesson 预警过此类陷阱,           │
+│      │                   方案确定性 / 风险预估应相应下调)      │
+│      └─ 未命中 / 无段 -> 当前任务无可借鉴的历史，正常评估      │
 │  Read _planning/mission_notes.md                             │
 │  - 检查: 上次迭代有什么失败/学习？                             │
 │  - 检查: 之前的 Clarifications 记录                           │
+│  - 检查: Compliance Checks (verdict ≠ pass) / Audit Trail     │
 └──────────────────────────────────────────────────────────────┘
            |
            v

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Cross-mission learning layer (Task 3B — Phase 0 historical lesson glob, consumer side)**
+- **Phase 0 step 2 — `{project-slug}` derivation** at mission start (in addition to Task 3A's Phase 5 derivation), unifying namespace use across producer and consumer sides.
+- **Phase 0 step 3 — historical lesson glob**: read all `*.md` frontmatter in `~/.claude/mission-archive/{slug}/lessons/`, match `keywords[]` and `description` against current task description (case-insensitive substring), cache up to 5 hits with full lesson body. Skips silently when directory doesn't exist (first mission for the project).
+- **`## Prior Lessons` section in mission_plan.md template** (between Context and Phases). Populated by Phase 0 step 3; written as `(no historical lessons matched this task)` when there are no hits.
+- **Step 1 Read-Before-Decide** now explicitly reads `## Prior Lessons` and feeds triggered lessons into Step 1.5 Confidence Check (lessons that warned about a known trap should lower Solution Certainty / Risk Assessment scores).
+- **Step 1 Read-Before-Decide** also checks `Compliance Checks` and `Audit Trail` (introduced in Task 1/2/3A) so previous-iteration evidence informs the next decision.
+- Closes the cross-mission learning loop: Task 3A produced lessons (production side); Task 3B consumes them (consumer side).
+
 **Cross-mission learning layer (Task 3A — Phase 5 Distill)**
 - **Phase 5: Distill** — new phase after Phase 4 Debrief, runs as a HARD prereq for `<promise>Mission Accomplished</promise>`. Scans this mission's `Decisions Made`, `Self-Reflections`, `Compliance Checks (verdict != pass)` and produces 1-3 reusable lessons (each ≤150 chars) written to `~/.claude/mission-archive/{project-slug}/lessons/{YYYY-MM-DD}-{topic}.md`.
 - **Lesson file structure** — frontmatter (`name`, `description`, `mission_date`, `keywords`) + `# Lesson:` headline + `Context` + `Lesson (≤150 字)` body + `Source: Iter N` provenance. Documented in SKILL.md `## 文件结构` section.
@@ -38,6 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **强制5 (Mandate 5)**: must run Step 3.6 Compliance Check after every build pass; `[x]` marking forbidden when Verdict ≠ pass.
 
 ### Changed
+- SKILL.md Phase 0 expanded from 5 steps to 7 steps (Task 3B): adds step 2 `project-slug` derivation, step 3 historical lesson glob, and step 5 now creates `mission_plan.md` with a `## Prior Lessons` section populated by step 3.
+- SKILL.md Step 1 Read-Before-Decide gains explicit Prior Lessons / Compliance Checks / Audit Trail reads (Task 3B).
+- `references/prompt-template.md` Standard Template Phase 0 mirrors SKILL.md's new 6-mandatory + 2-optional layout.
+- `references/prompt-template.md` Step 1 in iteration rules mirrors SKILL.md's Prior Lessons + Compliance Checks + Audit Trail reads.
+- `references/prompt-template.md` mission_plan.md template gains `## Prior Lessons` section between Context and Phases.
 - SKILL.md `## 三大强制` heading bumped through `四大` (Task 1) → `五大` (Task 2) to track new mandates.
 - SKILL.md Pre-Promise Audit Checklist: 4-item gate (Task 1) → 5-item gate (Task 3A); rationale paragraph extended to cover items 3/4/5; item 5 hard-prereq rationale added.
 - SKILL.md Step 3 Validate ASCII frame: `如无错误 -> 跳过 Step 3.5` changed to `如无错误 -> 进入 Step 3.6 Compliance Check`.
