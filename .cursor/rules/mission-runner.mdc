@@ -14,6 +14,18 @@ alwaysApply: false
 
 # Mission Runner - PIR Mode (Full Version)
 
+> ⚠ **VERSION NOTICE (2026-05-23)**: This rule file is **v1.0 protocol**, not yet
+> synced with v1.1 changes that landed in [`SKILL.md`](../../SKILL.md). The canonical
+> protocol lives in `SKILL.md`. v1.1 features **NOT yet enforced here**:
+>
+> - Step 3.6 Compliance Check (diff-vs-plan goal-drift detector)
+> - Pre-Promise Audit Checklist (5-item hard gate)
+> - Phase 5 Distill (cross-mission lesson archive)
+> - Phase 0 Prior Lessons glob
+> - Mandate 4 / Mandate 5
+>
+> Cursor users: consult `SKILL.md` for v1.1 spec until this file is re-synced.
+
 > **task-planner + ralph-loop + PIR Ultimate Fusion**
 >
 > Core Philosophy: **Filesystem as Memory + Read-Before-Decide + Failures as Data**

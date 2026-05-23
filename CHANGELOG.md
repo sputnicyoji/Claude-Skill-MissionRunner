@@ -58,6 +58,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `references/prompt-template.md` Completion Criteria section rewritten to require 5-item audit (replacing the looser "all [ ] marked + builds successfully" check).
 - `references/prompt-template.md` Step 4 in iteration rules: added preamble `(Reaching here implies Step 3.6 Compliance Check verdict was pass)` and routes promise through Pre-Promise Audit Checklist.
 
+### Fixed (Hardening Pass — 2026-05-23)
+
+Following an extra-high effort recall-mode code review that surfaced 15 verified findings across the v1.1 changes, the following fixes landed in a single hardening commit:
+
+**Critical flow / structural bugs**
+- **F13 — Phase 5 trigger flow unreachable**: Phase 5 Distill was positioned AFTER Phase 4 Debrief but Pre-Promise Audit item 5 (which gates the promise) requires Phase 5 to have already run. The workflow never instructed the agent to enter Phase 5 prior to the audit, deadlocking any iteration that reached "all tasks complete". Fixed by inlining the sequence `Phase 4 Debrief → Phase 5 Distill → Pre-Promise Audit` into Step 4 Checkpoint's "all done" branch.
+- **F11 — `[x]` timing contradiction between Mandate 2 and Mandate 5**: Step 2 Execute marked `[x]` immediately, but Mandate 5 required Verdict=pass before `[x]`. Fixed by moving the `[x]` mark from Step 2 to Step 3.6 verdict=pass branch; Mandate 2 reworded; Step 2 ASCII updated. `[x]` is now the composed signal of "code runs (Step 3) + functionality matches plan (Step 3.6)" rather than a verbal claim.
+- **F4 — Step 3.5 trigger silently missed `Step 3.6 escalate` caller**: Self-Reflection box only documented "Step 3 validation fails" as the trigger, even though Step 3.6 explicitly routes `escalate` verdicts to Step 3.5. Fixed by listing both triggers (a) build/lint/test fail, (b) Step 3.6 escalate.
+
+**Numeric / count drift after audit grew from 4 to 5 items (F1, 5 sites)**
+- `SKILL.md` Mandate 4 `4 项` → `5 项`.
+- `SKILL.md` Step 4 Checkpoint ASCII `(4 项)` / `4 项全通过` → `(5 项)` / `5 项全通过`.
+- `references/prompt-template.md` Step 4 `(4 items, see SKILL.md)` → `(5 items, see SKILL.md)` and `All 4 pass` → `All 5 pass`.
+- `references/prompt-template.md` Completion Criteria `ALL 4 Pre-Promise Audit items pass` → `ALL 5 ...`; added item 5 enumeration.
+- `references/prompt-template.md` Audit Trail example `All 4 items passed` → `All 5 items passed`.
+
+**Template completeness (F2, F3, S1, S2)**
+- `SKILL.md` inline `mission_notes.md` template: added missing sections `## Compliance Checks` (Task 2), `## Distilled Lessons` (Task 3A), `## Audit Trail` (Task 1).
+- `SKILL.md` inline `mission_plan.md` template: added `## Prior Lessons` section between Context and Phases.
+- `examples/_planning/mission_plan.md`: added populated `## Prior Lessons` example (with a sample lesson hit).
+- `examples/_planning/mission_notes.md`: added `## Compliance Checks` (with pass + escalate examples), `## Distilled Lessons`, `## Audit Trail` sections.
+
+**Placeholder / shell / Phase 5 hardening (F7, F18, F19, F15, S8)**
+- F7 `{today}` placeholder unbound → audit item 5 now defines `TODAY = ISO date` and provides both Bash and PowerShell command forms.
+- F18 lesson filename collision → Phase 5.4 gains mandatory collision guard: pre-write `ls` check, on conflict rename to `{date}-{topic}-r2.md` / `-r3.md` etc.
+- F19 `Verdict ≠ pass` ambiguity → Phase 5.3 now scans `Verdict = escalate` only (needs-revision is transient, not stable lesson material).
+- F15 + S8 — Phase 5.1 silently `cd`'d to git root and had a weaker slug normalization than Phase 0 → Phase 5.1 rewritten to (a) NOT cd (just read `git rev-parse` output), (b) explicitly apply `lowercase + kebab-case` to both git and no-git fallback, matching Phase 0 step 2 exactly.
+- F21 — Phase 5.2 mkdir command Windows compatibility → split into explicit `Unix-like (Bash/zsh)` and `Windows PowerShell` forms with a note "agent should select based on shell tool type; do not mix".
+
+**State machine modernization (S6)**
+- `SKILL.md` State Machine YAML bumped to v2.1: added states `compliance_check`, `checkpoint_mark`, `debrief`, `distill`, `audit`; `validate.pass` now routes to `compliance_check` (was `checkpoint`); `checkpoint.all_tasks_complete` now routes to `debrief` (was `done`).
+- ASCII visualization replaced with a simpler arrow-flow diagram covering all new states (the old box-drawing diagram was harder to maintain and had alignment drift).
+- `workflow_state.json` schema example updated with new fields (`task_marked_done`, `compliance_verdict`); valid `current_state` enumeration documented.
+
+**Scenario template simplification (F9)**
+- `references/prompt-template.md` Scenarios 1/2/3 no longer duplicate (stale) Phase 0 / Iteration Rules / Completion Criteria. Each scenario now contains only domain-specific Task Breakdown + Constraint Reminders, with an explicit banner instructing users to compose against the Standard Template at the top of the file (which carries the canonical 7-step Phase 0, full Iteration Rules including Step 3.6, and 5-item Completion Criteria).
+
+**Discovery surface (S3, S4, S5)**
+- `README.md`: Key Features table gains rows for Compliance Check / Pre-Promise Audit / Phase 5 Distill + archive. Core Workflow diagram updated to show the v1.1 flow including Step 3.6, Phase 5, and the 5-item audit gate.
+- `README_zh-CN.md`: synced with README.md (Key Features + Core Workflow translated).
+- `README_ja.md`: Key Features gains v1.1 rows (translated); a notice section directs Japanese readers to `SKILL.md` and English `README.md` for canonical v1.1 spec (Core Workflow diagram in this file remains at v1.0 wording pending a proper translation pass).
+- `.cursorrules`, `.cursor/rules/mission-runner.mdc`, `.cursor/rules/mission-runner-lite.mdc`: added prominent v1.0 → v1.1 sync-pending banners pointing Cursor users to `SKILL.md` for canonical v1.1 spec. Cursor rule file rewrite is tracked as future work.
+
+**Other (F5, F6)**
+- F5 — `references/prompt-template.md` Step 4 preamble previously asserted "Reaching here implies Step 3.6 verdict=pass", which is false on the Step 3 fail → Step 3.5 medium → Step 4 path. Reworded to "Reached on either path: (a) Step 3.6 verdict=pass and `[x]` just marked, or (b) Step 3.5 medium error returning to checkpoint with task left as `[ ]`".
+- F6 — `references/prompt-template.md` Completion Criteria item 3 (`git diff --stat` must show changes) previously rejected verify-only missions whose deliverable is empty diff. Added explicit waiver clause: item 3 may be waived IF mission_plan.md Success Criteria explicitly declares "no code change expected"; waiver must be recorded in Audit Trail.
+
 ### Removed
 - **RiderMcp legacy purge**: removed Kotlin Plugin / Unity / PSI / TypeScript Bridge specific content inherited from a previous incarnation of this skill. Affected:
   - `SKILL.md` frontmatter description (removed the "RiderMcp projects" activation line)

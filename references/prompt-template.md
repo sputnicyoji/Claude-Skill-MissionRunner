@@ -172,13 +172,13 @@ Calculate average and decide:
      Status: {fixed / next iteration / waiting}
 
 ### Step 4: Checkpoint
-- (Reaching here implies Step 3.6 Compliance Check verdict was `pass`)
+- (Reached on either path: (a) Step 3.6 verdict=pass, [x] just marked, or (b) Step 3.5 medium error returning to checkpoint with task left as `[ ]`)
 - Update Progress Log table
-- Decide: All Success Criteria complete?
-  - Yes -> run Pre-Promise Audit Checklist (4 items, see SKILL.md)
-    - All 4 pass -> Output `<promise>Mission Accomplished</promise>`
+- Decide: All Success Criteria complete (all `- [ ]` are `[x]` AND Success Criteria all `[x]`)?
+  - Yes -> enter Phase 4 Debrief -> enter Phase 5 Distill -> run Pre-Promise Audit Checklist (5 items, see SKILL.md)
+    - All 5 pass -> Output `<promise>Mission Accomplished</promise>`
     - Any fail   -> Output Partial Report + append result to `## Audit Trail`
-  - No  -> Continue next iteration
+  - No  -> Continue next iteration (back to Step 1 Read-Before-Decide)
 
 ---------------------------------------------------------------
                          Task Breakdown
@@ -203,14 +203,15 @@ List tasks by Phase:
                         Completion Criteria
 ---------------------------------------------------------------
 
-Output completion flag ONLY when ALL 4 Pre-Promise Audit items pass:
+Output completion flag ONLY when ALL 5 Pre-Promise Audit items pass:
 
 1. mission_plan.md: all `- [ ]` tasks marked `[x]`
 2. mission_plan.md: all Success Criteria marked `[x]`
-3. **External signal:** `git diff --stat` shows non-empty changes (LLM cannot fabricate this — strongest anti-hallucination check)
+3. **External signal:** `git diff --stat` shows non-empty changes (LLM cannot fabricate this — strongest anti-hallucination check). Exception: a verify-only mission whose deliverable is "confirm no change needed" may waive item 3 IF mission_plan.md Success Criteria explicitly declares "no code change expected"; record waiver in Audit Trail.
 4. **External signal:** Build/lint/test commands actually executed and passed (traceable in Progress Log: must contain `verified: pass` or equivalent record for the latest entry)
+5. **External signal:** Phase 5 Distill produced ≥1 lesson file under `~/.claude/mission-archive/{slug}/lessons/{TODAY}-*.md` (where TODAY is today's ISO date)
 
-If any of the 4 fails:
+If any of the 5 fails:
 - Do NOT output `<promise>Mission Accomplished</promise>`
 - Output Partial Report instead, including: which audit item failed, why, suggested next step
 - Append the audit result to mission_notes.md `## Audit Trail` section
@@ -228,12 +229,17 @@ If max iterations reached without completion:
 
 ## Scenario Templates
 
+> **重要：以下 3 个 Scenario 仅展示 domain-specific 的 Task Breakdown 和 Constraint Reminders。**
+> **完整 mission prompt 必须包含**：
+> - `## Phase 0: Initialization` (7 步, 含 slug 推导 + 历史 lesson glob), 来自 Standard Template
+> - `## Iteration Rules` (Step 1 / 1.5 / 2 / 3 / 3.5 / 3.6 / 4), 来自 Standard Template
+> - `## Completion Criteria` (5-item audit), 来自 Standard Template
+>
+> **使用方式**：复制 Standard Template 整体，然后用 Scenario 替换其中的 Task Breakdown 和 Constraint Reminders 段。
+
 ### Scenario 1: Adding New Entity Type (Three-Layer Architecture)
 
 ```
-/ralph-loop:ralph-loop "
-[MISSION RUNNER - PIR MODE]
-
 ## Task Objective
 Add refund functionality to the Order module in e-commerce system
 
@@ -241,17 +247,6 @@ Add refund functionality to the Order module in e-commerce system
 - Module path: src/modules/order/
 - Architecture layers: Data/Service/UI (three layers)
 - Related skills: project-specific domain rules
-
-## Phase 0: Initialization
-1. mkdir -p _planning
-2. Create mission_plan.md (with Success Criteria)
-3. Create mission_notes.md
-
-## Iteration Rules
-1. Read-Before-Decide: Read _planning/mission_plan.md
-2. Execute: Execute next [ ] task, mark [x] when done
-3. Validate: Build verification, append errors to mission_notes.md
-4. Checkpoint: Update Progress Log
 
 ## Task Breakdown
 ### Phase 1: Research
@@ -271,18 +266,11 @@ Add refund functionality to the Order module in e-commerce system
 - Do not instantiate directly, use factory/DI
 - Data layer must not reference Service/UI layers
 - State machine is advisory path, record reason if deviating
-
-## Completion Criteria
-<promise>Mission Accomplished</promise>
-" --completion-promise "Mission Accomplished" --max-iterations 3
 ```
 
 ### Scenario 2: Creating New UI Component
 
 ```
-/ralph-loop:ralph-loop "
-[MISSION RUNNER - PIR MODE]
-
 ## Task Objective
 Create order confirmation modal component OrderConfirmModal
 
@@ -290,17 +278,6 @@ Create order confirmation modal component OrderConfirmModal
 - Module path: src/components/order/
 - Architecture layers: UI (Component + Hooks)
 - Related skills: project-specific UI guidelines
-
-## Phase 0: Initialization
-1. mkdir -p _planning
-2. Create mission_plan.md
-3. Create mission_notes.md
-
-## Iteration Rules
-1. Read-Before-Decide: Read _planning/mission_plan.md
-2. Execute: Execute next [ ] task, mark [x] when done
-3. Validate: Build verification, append errors to mission_notes.md
-4. Checkpoint: Update Progress Log
 
 ## Task Breakdown
 ### Phase 1: Research
@@ -320,18 +297,11 @@ Create order confirmation modal component OrderConfirmModal
 - Do not modify auto-generated files
 - Do not use document.getElementById, use refs
 - Initialize hooks only at component top level
-
-## Completion Criteria
-<promise>Mission Accomplished</promise>
-" --completion-promise "Mission Accomplished" --max-iterations 3
 ```
 
 ### Scenario 3: Cross-Module Feature Implementation
 
 ```
-/ralph-loop:ralph-loop "
-[MISSION RUNNER - PIR MODE]
-
 ## Task Objective
 Implement order reward distribution feature, involving Order + Reward modules
 
@@ -339,17 +309,6 @@ Implement order reward distribution feature, involving Order + Reward modules
 - Module path: src/modules/order/, src/modules/reward/
 - Architecture layers: Service layer + Data layer
 - Related skills: project-specific domain rules
-
-## Phase 0: Initialization
-1. mkdir -p _planning
-2. Create mission_plan.md
-3. Create mission_notes.md
-
-## Iteration Rules
-1. Read-Before-Decide: Read _planning/mission_plan.md
-2. Execute: Execute next [ ] task, mark [x] when done
-3. Validate: Build verification, append errors to mission_notes.md
-4. Checkpoint: Update Progress Log
 
 ## Task Breakdown
 ### Phase 1: Research
@@ -367,10 +326,6 @@ Implement order reward distribution feature, involving Order + Reward modules
 ## Constraint Reminders
 - Use events for decoupling, avoid direct class references
 - Upper layers depend on lower layers, no reverse dependencies
-
-## Completion Criteria
-<promise>Mission Accomplished</promise>
-" --completion-promise "Mission Accomplished" --max-iterations 3
 ```
 
 ---
@@ -512,7 +467,7 @@ Implement order reward distribution feature, involving Order + Reward modules
 [Pre-Promise Audit results per Mission Accomplished attempt - external signal record]
 - [Iter N, Attempt M] Audit failed at item 3 (git diff empty)
   -> Suggested action: re-verify Iteration N actually wrote files, not just "claimed completion"
-- [Iter N+1, Attempt 1] All 4 items passed -> promise issued
+- [Iter N+1, Attempt 1] All 5 items passed -> promise issued
 ```
 
 ---

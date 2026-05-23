@@ -21,6 +21,9 @@ Mission Runner 是一个 AI 编码助手技能，能够自主执行复杂的多�
 | **置信度检查** | 每次任务执行前进行 4 维度评估 |
 | **自我反思 (Reflexion)** | 基于失败的语义梯度学习 (NeurIPS 2023) |
 | **建议式状态机** | 带逃逸舱的引导式工作流，保持灵活性 |
+| **合规性检查 (Step 3.6)** | build pass 后的 diff vs 计划任务验证器；捕获"代码能跑但做错事"的目标漂移 |
+| **Pre-Promise Audit (5 项硬关卡)** | promise 前的硬关卡，含 3 个 LLM 无法伪造的外部信号 (git diff / build 输出 / lesson 文件) |
+| **Phase 5 Distill + 跨任务存档** | 每次 mission 写 1-3 条 ≤150 字 lesson 到 `~/.claude/mission-archive/{slug}/lessons/`；后续 mission 在 Phase 0 glob 它们作为 Prior Lessons |
 
 ## 适用场景
 
@@ -104,20 +107,34 @@ _planning/
 
 ```
 Phase 0: 初始化
+├── 解析任务
+├── 确定 {project-slug}                              (v1.1 新增: 跨任务命名空间)
+├── Glob ~/.claude/mission-archive/{slug}/lessons/  (v1.1 新增: 历史 lesson 命中)
 ├── 创建 _planning/ 目录
-├── 创建 mission_plan.md (任务 + 成功标准)
-└── 创建 mission_notes.md (空笔记)
+├── 创建 mission_plan.md (含 ## Prior Lessons 段, 从 glob 注入)
+└── 创建 mission_notes.md (所有标准段)
 
 每次迭代:
-├── Step 1: 决策前读取 (锚定目标)
+├── Step 1: 决策前读取 (读 Prior Lessons + notes; 喂入置信度检查)
 ├── Step 1.5: 置信度检查 (4 维度)
-├── Step 2: 执行 (仅一个任务)
+├── Step 2: 执行 (只做一个任务; **不立即勾 [x]**)
 ├── Step 3: 验证 (编译/lint/测试)
-├── Step 3.5: 自我反思 (如果验证失败)
-└── Step 4: 检查点 (更新进度)
+│      ├── 失败 -> Step 3.5
+│      └── 通过 -> Step 3.6
+├── Step 3.5: 自我反思 (验证失败 或 Step 3.6 escalate)
+├── Step 3.6: 合规性检查 (v1.1 新增: diff vs 计划目标漂移验证)
+│      ├── pass -> 勾 [x] + Step 4
+│      ├── needs-revision -> 不勾, 下迭代继续此任务
+│      └── escalate -> Step 3.5
+└── Step 4: 检查点
+       ├── 否 -> 下一迭代
+       └── 是 (全部完成) -> Phase 4 Debrief -> Phase 5 Distill -> 5 项 Audit
 
-完成:
-└── 输出: <promise>Mission Accomplished</promise>
+Phase 4: Debrief        (确认 Success Criteria 全 [x])
+Phase 5: Distill        (v1.1 新增: 蒸馏 1-3 条 ≤150 字 lesson 到 archive)
+Pre-Promise Audit       (v1.1 新增: 5 项硬关卡, 含 3 个外部信号)
+├── 5 项全过 -> <promise>Mission Accomplished</promise>
+└── 任一失败 -> Partial Report + 追加到 ## Audit Trail
 ```
 
 ## 置信度检查协议

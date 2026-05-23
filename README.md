@@ -22,6 +22,9 @@ Mission Runner is an AI coding assistant skill that enables autonomous execution
 | **Confidence Check** | 4-dimension assessment before each task execution |
 | **Self-Reflection (Reflexion)** | Semantic gradient learning from failures (NeurIPS 2023) |
 | **Advisory State Machine** | Guided workflow with escape hatch for flexibility |
+| **Compliance Check (Step 3.6)** | Build-pass diff-vs-plan verifier; catches "code runs but does the wrong thing" goal drift |
+| **Pre-Promise Audit (5-item gate)** | Hard gate before `<promise>` with 3 external signals (git diff, build output, lesson file) the LLM cannot fabricate |
+| **Phase 5 Distill + cross-mission archive** | Every mission writes 1-3 ≤150-char lessons to `~/.claude/mission-archive/{slug}/lessons/`; future missions glob them in Phase 0 as Prior Lessons |
 
 ## When to Use
 
@@ -95,30 +98,50 @@ Add user authentication feature to the application
 ### File Structure Created
 
 ```
-_planning/
-├── mission_plan.md       # Tasks + success criteria + progress
-├── mission_notes.md      # Findings + decisions + failures
+_planning/                                   # Per-mission (transient)
+├── mission_plan.md       # Tasks + success criteria + Prior Lessons + progress
+├── mission_notes.md      # Findings + decisions + failures + Compliance Checks +
+│                         #   Distilled Lessons + Audit Trail
 └── workflow_state.json   # State machine position (optional)
+
+~/.claude/mission-archive/                   # Cross-mission (persistent)
+└── {project-slug}/
+    └── lessons/
+        └── {YYYY-MM-DD}-{topic-kebab}.md   # ≤150-char reusable insights
 ```
 
 ## Core Workflow
 
 ```
 Phase 0: Initialize
+├── Parse task
+├── Determine {project-slug}                       (NEW: cross-mission ns)
+├── Glob ~/.claude/mission-archive/{slug}/lessons/ (NEW: historical lesson hits)
 ├── Create _planning/ directory
-├── Create mission_plan.md (tasks + success criteria)
-└── Create mission_notes.md (empty notes)
+├── Create mission_plan.md (incl. ## Prior Lessons injected from glob)
+└── Create mission_notes.md (all standard sections)
 
 Each Iteration:
-├── Step 1: Read-Before-Decide (anchor to goal)
+├── Step 1: Read-Before-Decide (reads Prior Lessons + notes; feeds Confidence Check)
 ├── Step 1.5: Confidence Check (4 dimensions)
-├── Step 2: Execute (one task only)
+├── Step 2: Execute (one task only; does NOT mark [x] yet)
 ├── Step 3: Validate (compile/lint/test)
-├── Step 3.5: Self-Reflection (if validation fails)
-└── Step 4: Checkpoint (update progress)
+│      ├── fail -> Step 3.5
+│      └── pass -> Step 3.6
+├── Step 3.5: Self-Reflection (on validation fail OR Step 3.6 escalate)
+├── Step 3.6: Compliance Check (NEW: diff-vs-plan goal-drift verifier)
+│      ├── pass -> mark [x] + Step 4
+│      ├── needs-revision -> don't mark; next iteration continues
+│      └── escalate -> Step 3.5
+└── Step 4: Checkpoint
+       ├── No -> next iteration
+       └── Yes (all done) -> Phase 4 Debrief -> Phase 5 Distill -> 5-item Audit
 
-Completion:
-└── Output: <promise>Mission Accomplished</promise>
+Phase 4: Debrief        (confirm Success Criteria all [x])
+Phase 5: Distill        (NEW: extract 1-3 ≤150-char lessons to archive)
+Pre-Promise Audit       (NEW: 5-item gate with 3 external signals)
+├── all 5 pass -> <promise>Mission Accomplished</promise>
+└── any fail   -> Partial Report + append to ## Audit Trail
 ```
 
 ## Confidence Check Protocol

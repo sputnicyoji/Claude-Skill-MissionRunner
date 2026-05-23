@@ -12,6 +12,11 @@ alwaysApply: false
 
 > Quick reference for PIR (Plan-Iterate-Resolve) workflow
 
+> ⚠ **VERSION NOTICE (2026-05-23)**: v1.0 protocol; v1.1 features
+> (Step 3.6 Compliance Check, Pre-Promise Audit 5-item gate, Phase 5 Distill,
+> Phase 0 lesson glob, Mandates 4/5) are **not enforced here**.
+> See [`../../SKILL.md`](../../SKILL.md) for canonical v1.1 spec.
+
 ## Core Rules
 
 ```

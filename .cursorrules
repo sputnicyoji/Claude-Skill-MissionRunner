@@ -4,6 +4,20 @@
 >
 > Core Philosophy: **Filesystem as Memory + Read-Before-Decide + Failures as Data**
 
+> ⚠ **VERSION NOTICE (2026-05-23)**: This file is **v1.0 protocol**, not yet synced
+> with v1.1 changes that landed in `SKILL.md`. The canonical and most up-to-date
+> protocol lives in [`SKILL.md`](SKILL.md). Cursor users should be aware that the
+> following v1.1 features are **NOT yet enforced by this `.cursorrules` file**:
+>
+> - **Step 3.6 Compliance Check** (build-pass diff-vs-plan goal-drift detector)
+> - **Pre-Promise Audit Checklist** (5-item hard gate before promise)
+> - **Phase 5 Distill** (cross-mission lesson archive at `~/.claude/mission-archive/`)
+> - **Phase 0 Prior Lessons glob** (consume archive at mission start)
+> - **Mandate 4 / Mandate 5** (five mandatory rules instead of three)
+>
+> If you're using Cursor, please consult `SKILL.md` for the canonical v1.1 spec until
+> this `.cursorrules` is rewritten. Pending Cursor-targeted re-sync — track in CHANGELOG.
+
 ## Activation Triggers
 
 Activate this rule when:

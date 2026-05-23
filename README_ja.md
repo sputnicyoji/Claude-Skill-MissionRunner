@@ -21,6 +21,11 @@ Mission Runner は、複雑なマルチファイル開発タスクを自律的�
 | **信頼度チェック** | 各タスク実行前に4次元評価 |
 | **自己反省 (Reflexion)** | 失敗からのセマンティック勾配学習 (NeurIPS 2023) |
 | **アドバイザリーステートマシン** | エスケープハッチ付きのガイド付きワークフロー |
+| **コンプライアンスチェック (Step 3.6)** | ビルド成功後の diff vs プラン検証;「コードは動くが意図と違う」というゴールドリフトを捕捉 |
+| **Pre-Promise Audit (5 項目ゲート)** | promise 前のハードゲート、LLM が偽造できない 3 つの外部信号 (git diff / ビルド出力 / lesson ファイル) を含む |
+| **Phase 5 Distill + クロスミッション・アーカイブ** | 各ミッションが 1-3 件の ≤150 文字 lesson を `~/.claude/mission-archive/{slug}/lessons/` に書き込み、後続ミッションが Phase 0 で Prior Lessons として glob |
+
+> **注**: 本日本語版は v1.0 ベースの説明を保持しています。v1.1 で追加された Compliance Check / Pre-Promise Audit / Phase 5 Distill の詳細仕様は [SKILL.md](SKILL.md) および英語版 [README.md](README.md) の Core Workflow 図を参照してください。
 
 ## 使用すべき場面
 

@@ -72,23 +72,25 @@ planning_dir: "_planning"      # 计划文件目录
   -> Read _planning/mission_plan.md
   -> 确认目标、当前阶段、下一个任务
 
-强制2: 必须实时更新计划文件
-  -> 完成任务立即标记 [x]
-  -> 更新 Progress Log 表格
+强制2: 必须在 Step 3.6 verdict=pass 之后才标记任务 [x]
+  -> Step 2 Execute 完成时仅更新 Progress Log，**不勾 [x]**
+  -> 标记 [x] 的唯一时机: Step 3 build pass + Step 3.6 verdict=pass
+  -> 这样 [x] 是"代码运行 + 实现正确"两道闸门的合成信号
+     而非"我做了什么"的口头汇报
 
 强制3: 必须在任务完成时输出 Mission Accomplished
   -> 格式: <promise>Mission Accomplished</promise>
-  -> 只有所有任务完成且验证通过才能输出
+  -> 只有所有任务完成且 5 项 audit 全过才能输出
 
 强制4: 必须在发 Mission Accomplished 之前通过 Pre-Promise Audit Checklist
   -> 见下方 "Pre-Promise Audit Checklist (CRITICAL)" 段
-  -> 4 项中任一未通过 -> 禁止发 promise，输出 Partial Report
+  -> 5 项中任一未通过 -> 禁止发 promise，输出 Partial Report
 
 强制5: 必须在每次 build pass 之后执行 Step 3.6 Compliance Check
   -> 见工作流段的 Step 3.6 框
   -> 跳过 Compliance Check 等同于跳过 Step 3 Validate
   -> Verdict 必须写入 mission_notes.md > Compliance Checks
-  -> Verdict ≠ pass 时禁止勾本任务 [x]，禁止进入 Step 4
+  -> Verdict ≠ pass 时禁止勾本任务 [x]，禁止进入 Step 4 "all done" 分支
 ```
 
 ## Pre-Promise Audit Checklist (CRITICAL)
@@ -101,7 +103,7 @@ planning_dir: "_planning"      # 计划文件目录
 | 2 | mission_plan.md 所有 Success Criteria 标记 [x] | 内部（plan 文件） | Success Criteria 段无 `[ ]` |
 | 3 | `git diff --stat` / `git status` 显示有实质改动 | **外部信号**（git） | 至少 1 个文件 modified/added |
 | 4 | Build/lint/test 命令真实执行并通过 | 外部信号（命令输出） | Progress Log 最近一项含 `verified: pass` 或同等记录 |
-| 5 | Phase 5 Distill 已完成 (archive 目录有本次 mission 的 lesson 文件) | **外部信号**（文件系统） | `ls ~/.claude/mission-archive/{slug}/lessons/{today}-*.md` 至少返回 1 条 |
+| 5 | Phase 5 Distill 已完成 (archive 目录有本次 mission 的 lesson 文件) | **外部信号**（文件系统） | 设 `TODAY` = ISO 当日 (`date +%Y-%m-%d` / `Get-Date -Format yyyy-MM-dd`); Bash: `ls ~/.claude/mission-archive/{slug}/lessons/${TODAY}-*.md`; PowerShell: `Get-ChildItem "$env:USERPROFILE\.claude\mission-archive\{slug}\lessons\$TODAY-*.md"`; 任一 shell 至少返回 1 条 |
 
 **任一项未通过：**
 - 不输出 `<promise>Mission Accomplished</promise>`
@@ -385,19 +387,19 @@ Phase 2: Implementation [1/3 done]
 ```yaml
 # workflow_state_machine.yaml
 name: mission-runner-pir
-version: "2.0"
+version: "2.1"
 
 states:
   init:
-    description: "初始化规划文件"
+    description: "Phase 0 初始化: slug 推导, 历史 lesson glob, 创建 _planning/"
     next: read_before_decide
 
   read_before_decide:
-    description: "读取计划文件，锚定目标"
+    description: "读取 plan + notes + Prior Lessons, 锚定目标"
     next: confidence_check
 
   confidence_check:
-    description: "评估当前任务置信度"
+    description: "评估当前任务置信度 (含 Prior Lessons 信号)"
     transitions:
       high: execute           # >= 4 分
       medium: execute         # 3-4 分 (带记录)
@@ -408,100 +410,128 @@ states:
     next: confidence_check    # 澄清后重新评估
 
   execute:
-    description: "执行当前任务"
+    description: "Step 2: 执行任务 (不勾 [x])"
     next: validate
 
   validate:
-    description: "验证执行结果"
+    description: "Step 3: build / lint / test 验证"
     transitions:
-      pass: checkpoint
+      pass: compliance_check   # build pass 后必须进 Step 3.6
       fail: self_reflection
 
-  self_reflection:
-    description: "分析失败原因"
+  compliance_check:
+    description: "Step 3.6: diff vs 任务描述的 verifier"
     transitions:
-      simple_error: execute   # 立即重试 (同一迭代)
-      medium_error: checkpoint # 记录，下次迭代
-      complex_error: ask_user  # 需要用户澄清
+      pass: checkpoint_mark    # 勾 [x] + 进 Step 4
+      needs_revision: read_before_decide  # 不勾 [x], 追加修正子任务, 下迭代
+      escalate: self_reflection           # 视为 medium error
+
+  self_reflection:
+    description: "Step 3.5: 失败/escalate 后的反思"
+    transitions:
+      simple_error: execute     # 立即重试 (同一迭代)
+      medium_error: checkpoint  # 记录, 不勾 [x], 进 Step 4 (会因任务未完成转入 read_before_decide)
+      complex_error: ask_user   # 需要用户澄清
+
+  checkpoint_mark:
+    description: "Step 3.6 pass 后勾 [x] + Progress Log"
+    next: checkpoint
 
   checkpoint:
-    description: "更新进度，检查完成状态"
+    description: "Step 4: 检查任务/Success Criteria 是否全完成"
     transitions:
-      complete: done
+      all_tasks_complete: debrief   # 进 Phase 4 Debrief
       continue: read_before_decide  # 下一迭代
       max_iterations: report        # 达到最大迭代
+
+  debrief:
+    description: "Phase 4: 确认 Success Criteria 全 [x]"
+    next: distill
+
+  distill:
+    description: "Phase 5: 从 notes 蒸馏 1-3 条 lesson 写入 archive (含碰撞保护)"
+    next: audit
+
+  audit:
+    description: "Pre-Promise Audit Checklist (5 项)"
+    transitions:
+      all_pass: done
+      any_fail: report   # Partial Report, 追加 Audit Trail
 
   done:
     description: "任务完成"
     output: "<promise>Mission Accomplished</promise>"
 
   report:
-    description: "报告部分完成"
-    output: "剩余任务列表 + 建议"
+    description: "报告部分完成 / Partial Report"
+    output: "剩余任务列表 + Audit 失败项 + 建议"
 ```
 
 ### 状态机可视化
 
 ```
-                    ┌──────────────────────────────────────────────────────┐
-                    │                                                      │
-                    v                                                      │
-              ┌──────────┐                                                │
-              │   init   │                                                │
-              └────┬─────┘                                                │
-                   │                                                      │
-                   v                                                      │
-         ┌─────────────────────┐                                         │
-         │  read_before_decide │◄────────────────────────────────────────┤
-         └─────────┬───────────┘                                         │
-                   │                                                      │
-                   v                                                      │
-          ┌────────────────────┐     low      ┌───────────┐              │
-          │  confidence_check  │─────────────►│  ask_user │              │
-          └────────┬───────────┘              └─────┬─────┘              │
-                   │ high/medium                    │                    │
-                   v                                │ (澄清后)            │
-              ┌─────────┐◄──────────────────────────┘                    │
-              │ execute │                                                 │
-              └────┬────┘                                                 │
-                   │              ┌─────────────────┐                    │
-                   v              │ self_reflection │                    │
-              ┌──────────┐  fail  └────────┬────────┘                    │
-              │ validate │────────────────►│                             │
-              └────┬─────┘                 │ simple_error                │
-                   │ pass                  └──────────►│                 │
-                   v                                   │                 │
-             ┌────────────┐◄────────────────(medium)───┘                 │
-             │ checkpoint │                                              │
-             └──────┬─────┘                                              │
-                    │                                                    │
-           ┌────────┼────────┐                                          │
-           │        │        │                                          │
-           v        v        v                                          │
-       ┌──────┐ ┌────────┐ ┌────────┐                                   │
-       │ done │ │ report │ │continue│───────────────────────────────────┘
-       └──────┘ └────────┘ └────────┘
+init
+  ↓
+read_before_decide ←──────────────────────────┐
+  ↓                                            │
+confidence_check ──(low)──→ ask_user           │
+  ↓ (high/medium)              ↓ (澄清后)       │
+execute ←────────────────────┘                 │
+  ↓                                            │
+validate ──(fail)──→ self_reflection ──┐       │
+  ↓ (pass)                              │      │
+compliance_check ←─────────(escalate)──┤       │
+  ↓ (pass)                              │      │
+  ↓     (needs_revision)─────────────────────→ │  (回 read_before_decide)
+  ↓                                     │      │
+checkpoint_mark (勾 [x])                 │      │
+  ↓                              (medium │      │
+checkpoint                       error)  ↓      │
+  ↓                              ──→ checkpoint
+  ↓                              (simple_error→execute)
+  ↓ (all_tasks_complete)                        │
+debrief                                         │ (continue: 任务未完)
+  ↓                                             │
+distill (写 lesson 到 archive)                   │
+  ↓                                             │
+audit (5 项) ──(any_fail)──→ report             │
+  ↓ (all_pass)                                  │
+done <promise>                                  │
+                                                │
+checkpoint (continue) ─────────────────────────┘
+checkpoint (max_iterations) ───→ report
+ask_user (complex_error from self_reflection) ─→ (等待用户)
 ```
+
+简化阅读路径:
+- **理想路径**: init → read → confidence → execute → validate(pass) → compliance(pass) → mark[x] → checkpoint → debrief → distill → audit(pass) → done
+- **build 失败**: validate(fail) → self_reflection → execute(retry) 或 checkpoint(下迭代)
+- **goal drift**: compliance(escalate) → self_reflection → 同上
+- **小返工**: compliance(needs_revision) → 不勾 [x] → read (下迭代继续此任务)
 
 ### 状态持久化
 
 ```json
-// _planning/workflow_state.json
+// _planning/workflow_state.json (v2.1, 含 Step 3.6 / Phase 5 / audit 状态)
 {
-  "current_state": "execute",
+  "current_state": "compliance_check",
   "iteration": 2,
   "retry_count": 0,
   "phase": "implementation",
   "task_index": 3,
+  "task_marked_done": false,
+  "compliance_verdict": null,
   "confidence_scores": {
     "understanding": 5,
     "certainty": 4,
     "dependencies": 4,
     "risk": 4
   },
-  "timestamp": "2024-01-15T15:30:00Z"
+  "timestamp": "2026-05-23T15:30:00Z"
 }
 ```
+
+合法 `current_state` 值: init / read_before_decide / confidence_check / ask_user / execute / validate / compliance_check / self_reflection / checkpoint_mark / checkpoint / debrief / distill / audit / done / report
 
 ### 状态机使用规则 (建议性)
 
@@ -610,6 +640,10 @@ keywords: [关键词1, 关键词2, ...]
 - 涉及架构层: Data/Service/UI
 - 相关约束: [项目特定约束]
 
+## Prior Lessons
+[Phase 0 step 3 产出: 从 ~/.claude/mission-archive/{slug}/lessons/ glob 命中的历史 lesson]
+[未命中时写: "(no historical lessons matched this task)"]
+
 ## Phases
 
 ### Phase 1: Research & Discovery
@@ -656,6 +690,14 @@ keywords: [关键词1, 关键词2, ...]
 
 最大保留: 3 条 (超出时移除最旧)
 
+## Compliance Checks
+[Step 3.6 verdicts per build-pass iteration - structured goal-drift detector]
+- [Iter N] Task: "..."
+  Diff files: [...]
+  Q1 (实现完整度): complete / partial / drift
+  Q2 (意外改动): none / found - [list]
+  Verdict: pass / needs-revision / escalate
+
 ## Clarifications
 [用户澄清记录 - 置信度检查的结果]
 - [Iter N] Q: [问的问题]
@@ -664,6 +706,18 @@ keywords: [关键词1, 关键词2, ...]
 
 ## Open Questions
 [未解决的问题]
+
+## Distilled Lessons
+[Phase 5 输出 - 写到 ~/.claude/mission-archive/{slug}/lessons/ 的 lesson 文件清单]
+- {YYYY-MM-DD}-{topic-kebab}.md
+  "一句话摘要"
+  Source: Iter N (Decisions Made / Self-Reflections / Compliance Checks)
+
+## Audit Trail
+[Pre-Promise Audit 失败记录 - 每次被拒的 promise 尝试]
+- [Iter N, Attempt M] Audit failed at item X (原因)
+  -> Suggested action: ...
+- [Iter N+1, Attempt 1] All 5 items passed -> promise issued
 ```
 
 ---
@@ -746,8 +800,8 @@ Phase 0: Initialization (初始化)
 │  遵循项目约束                                                 │
 │                                                              │
 │  实时更新 mission_plan.md:                                    │
-│  - 完成任务立即标记 [x]                                       │
-│  - 更新 Progress Log 表格                                     │
+│  - **不立即勾 [x]** (强制2): [x] 的合法时机是 Step 3.6 pass 后  │
+│  - 更新 Progress Log 表格 ("Iter N: 完成了 xxx, 待 verify")    │
 └──────────────────────────────────────────────────────────────┘
            |
            v
@@ -782,11 +836,12 @@ Phase 0: Initialization (初始化)
 │       Verdict: {pass / needs-revision / escalate}             │
 │                                                              │
 │  4. 根据 Verdict 分支:                                        │
-│     - pass           -> 进入 Step 4 Checkpoint                │
+│     - pass           -> **此时勾本任务 [x]** (强制2 满足)      │
+│                        进入 Step 4 Checkpoint                 │
 │     - needs-revision -> 不勾本任务 [x]                        │
 │                        在 plan 该任务下追加修正子任务         │
 │                        下一迭代继续此任务                     │
-│     - escalate       -> 视为"中等错误"                        │
+│     - escalate       -> 不勾本任务 [x]                        │
 │                        触发 Step 3.5 Self-Reflection          │
 │                        Q1/Q2 答案作为 Reflection 输入         │
 └──────────────────────────────────────────────────────────────┘
@@ -794,7 +849,10 @@ Phase 0: Initialization (初始化)
            |
            v (如果失败 / escalate)
 ┌─ Step 3.5: Self-Reflection (自我反思) ───────────────────────┐
-│  **触发条件**: Step 3 验证失败                                │
+│  **触发条件**:                                                │
+│    a. Step 3 验证失败 (build / lint / test 失败), 或          │
+│    b. Step 3.6 Compliance Check verdict = escalate            │
+│       (此时 build 已 pass, 但 diff 与任务描述偏离过远)        │
 │                                                              │
 │  1. 生成反思 (使用 Self-Reflection Prompt):                   │
 │     - 为什么这个实现失败了？（根本原因）                        │
@@ -820,16 +878,19 @@ Phase 0: Initialization (初始化)
            |
            v
 ┌─ Step 4: Checkpoint (检查点) ────────────────────────────────┐
+│  (到达此处隐含: Step 3 build pass + Step 3.6 verdict=pass)   │
 │  更新 Progress Log:                                          │
-│  | N | Phase X | 完成了 xxx, 遇到 yyy | Done/Blocked |        │
+│  | N | Phase X | 完成了 xxx, verified: pass | Done |          │
 │                                                              │
-│  判断: 所有任务完成？                                         │
-│  ├─ 是 -> 执行 Pre-Promise Audit Checklist (4 项)             │
-│  │       ├─ 4 项全通过 -> <promise>Mission Accomplished</promise>│
+│  判断: 所有任务完成？(全部 [x] 已勾 + Success Criteria 全 [x])│
+│  ├─ 是 -> 进入 Phase 4 Debrief (确认 Success Criteria)        │
+│  │       -> 进入 Phase 5 Distill (产出 lesson 文件)           │
+│  │       -> 跑 Pre-Promise Audit Checklist (5 项)             │
+│  │       ├─ 5 项全通过 -> <promise>Mission Accomplished</promise>│
 │  │       └─ 任一未通过 -> 输出 Partial Report                 │
 │  │                       追加审计结果到 mission_notes.md      │
 │  │                       > Audit Trail 段                     │
-│  └─ 否 -> 继续下一迭代                                        │
+│  └─ 否 -> 继续下一迭代 (回 Step 1 Read-Before-Decide)         │
 └──────────────────────────────────────────────────────────────┘
 
 ---------------------------------------------------------------
@@ -843,26 +904,38 @@ Phase 4: Debrief (收尾)
 
 Phase 5: Distill (收尾蒸馏 - Mission Accomplished 的硬前置)
 
-├── 5.1 确定 project-slug:
-│      cd 到 git 根目录: `git rev-parse --show-toplevel`
-│      取末段目录名 -> 小写 + kebab-case = {project-slug}
-│      无 git 仓库时: 用 cwd 末段目录名
+├── 5.1 确定 project-slug (与 Phase 0 step 2 一致, 不 cd):
+│      在 git 仓库内: `git rev-parse --show-toplevel` 输出末段
+│                    -> 小写 + kebab-case = {project-slug}
+│      不在 git 仓库内: `pwd` 输出末段 -> 小写 + kebab-case
+│      **不要 cd** —— 只读取命令输出，保持当前 cwd 不变
+│      示例: E:\Yoji\Prism-OS -> prism-os
 │
 ├── 5.2 确保 archive 目录存在:
-│      Unix:    mkdir -p "$HOME/.claude/mission-archive/{slug}/lessons"
-│      Windows: %USERPROFILE%\.claude\mission-archive\{slug}\lessons
-│      (PowerShell: New-Item -ItemType Directory -Force -Path ...)
+│      Unix-like (Bash/zsh):
+│        mkdir -p "$HOME/.claude/mission-archive/{slug}/lessons"
+│      Windows PowerShell:
+│        New-Item -ItemType Directory -Force -Path `
+│          "$env:USERPROFILE\.claude\mission-archive\{slug}\lessons"
+│      Agent 应根据 shell tool 类型选择对应命令; 不要混用
 │
 ├── 5.3 从本次 mission_notes.md 提取 Lesson 候选:
 │      扫描以下三段:
 │        - Decisions Made: 哪个决定值得复用？
 │        - Self-Reflections: 哪个失败的根因有跨场景价值？
-│        - Compliance Checks (Verdict ≠ pass): 哪类 drift 应该提前防？
+│        - Compliance Checks **(Verdict = escalate 的)**: 哪类 drift│
+│          应该提前防？(needs-revision 通常下迭代变 pass, 不算稳定教训)│
 │      生成 1-3 条候选（不是越多越好，宁缺毋滥）
 │
 ├── 5.4 每条候选写入 archive 目录:
-│      文件名: {YYYY-MM-DD}-{topic-kebab-case}.md
-│      内容格式: 见下方 "Lesson 文件结构" 段
+│      基础文件名: {YYYY-MM-DD}-{topic-kebab-case}.md
+│      内容格式: 见本文档 "## 文件结构 > Lesson 文件结构" 段
+│      **碰撞保护** (强制):
+│        写入前 ls 检查文件是否已存在
+│        ├─ 不存在 -> 直接写入基础文件名
+│        └─ 已存在 -> 改名 {YYYY-MM-DD}-{topic}-r2.md (依次递增 r3, r4...)
+│                    直到找到不冲突的文件名
+│        理由: 同日多迭代 mission 可能产出同主题 lesson, 静默覆盖会丢失深度
 │      Lesson 正文 ≤150 字（强制：超出则压缩或拆条）
 │
 ├── 5.5 在 mission_notes.md 追加 ## Distilled Lessons 段:

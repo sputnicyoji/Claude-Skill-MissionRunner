@@ -22,6 +22,20 @@
   Strategy: Fix immediately
   Status: Fixed
 
+## Compliance Checks
+- [Iter 3] Task: "Create OrderRefundData.ts"
+  Diff files: src/modules/order/data/OrderRefundData.ts (new), src/modules/order/index.ts (export)
+  Q1 (completeness): complete
+  Q2 (side changes): none
+  Verdict: pass
+
+- [Iter 4] Task: "Create OrderRefundService.ts"
+  Diff files: src/modules/order/services/OrderRefundService.ts, src/modules/order/tests/OrderService.test.ts (unplanned refactor)
+  Q1 (completeness): complete
+  Q2 (side changes): found - test file refactor not in task scope
+  Verdict: escalate
+  -> triggered Step 3.5 Self-Reflection; will revert test changes next iteration
+
 ## Clarifications
 - [Iter 2] Q: Should refund support partial amounts?
   A: Yes, user should be able to specify refund amount up to order total
@@ -34,3 +48,12 @@
 ## Open Questions
 - Should we send email notification on refund completion?
 - What's the retry policy for failed refund transactions?
+
+## Distilled Lessons
+[Will be populated by Phase 5 Distill at mission end - lesson files written to
+ ~/.claude/mission-archive/ecommerce-app/lessons/]
+- (Phase 5 has not yet run; this section is currently empty.)
+
+## Audit Trail
+[Will be populated when Mission Accomplished is attempted - records any audit failures.]
+- (No promise attempts yet.)
