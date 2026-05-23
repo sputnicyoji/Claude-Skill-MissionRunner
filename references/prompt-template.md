@@ -468,6 +468,15 @@ Implement order reward distribution feature, involving Order + Reward modules
 [Unresolved questions]
 - Should refund support partial amount?
 
+## Distilled Lessons
+[Phase 5 output - lesson files written to ~/.claude/mission-archive/{slug}/lessons/]
+- 2026-05-23-refund-flow-architecture.md
+  "退款状态机与订单状态机正交时应独立 Service，不要塞进 OrderService"
+  Source: Iter 3 Decisions Made
+- 2026-05-23-compliance-check-side-change-pattern.md
+  "build pass 不等于 task done; 'while I was at it' refactor 是 Compliance Check 的主要拦截目标"
+  Source: Iter 2 Compliance Checks (escalate verdict)
+
 ## Audit Trail
 [Pre-Promise Audit results per Mission Accomplished attempt - external signal record]
 - [Iter N, Attempt M] Audit failed at item 3 (git diff empty)

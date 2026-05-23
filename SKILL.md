@@ -93,7 +93,7 @@ planning_dir: "_planning"      # 计划文件目录
 
 ## Pre-Promise Audit Checklist (CRITICAL)
 
-**在输出 `<promise>Mission Accomplished</promise>` 之前必须逐项核对，4 项全部通过才允许发 promise。**
+**在输出 `<promise>Mission Accomplished</promise>` 之前必须逐项核对，5 项全部通过才允许发 promise。**
 
 | # | 检查项 | 信号来源 | 通过条件 |
 |---|--------|----------|----------|
@@ -101,14 +101,18 @@ planning_dir: "_planning"      # 计划文件目录
 | 2 | mission_plan.md 所有 Success Criteria 标记 [x] | 内部（plan 文件） | Success Criteria 段无 `[ ]` |
 | 3 | `git diff --stat` / `git status` 显示有实质改动 | **外部信号**（git） | 至少 1 个文件 modified/added |
 | 4 | Build/lint/test 命令真实执行并通过 | 外部信号（命令输出） | Progress Log 最近一项含 `verified: pass` 或同等记录 |
+| 5 | Phase 5 Distill 已完成 (archive 目录有本次 mission 的 lesson 文件) | **外部信号**（文件系统） | `ls ~/.claude/mission-archive/{slug}/lessons/{today}-*.md` 至少返回 1 条 |
 
 **任一项未通过：**
 - 不输出 `<promise>Mission Accomplished</promise>`
 - 改为输出 Partial Report，列出：哪一项未通过、原因、下一步建议
 - 把审计结果追加到 mission_notes.md 新增的 `## Audit Trail` 段
 
-**为什么必须有"外部信号"（项 3、项 4）：**
-LLM 自报"已完成"是不可信的——存在 hallucinate 完成度的常见失败模式（checkboxes 全勾但 git diff 是空的）。`git diff` 和命令执行输出是 LLM 不能伪造的外部状态，是最强的反 hallucination 信号。
+**为什么必须有"外部信号"（项 3、项 4、项 5）：**
+LLM 自报"已完成"是不可信的——存在 hallucinate 完成度的常见失败模式（checkboxes 全勾但 git diff 是空的；或宣称 distill 完成但 archive 目录是空的）。`git diff`、命令执行输出、文件系统状态都是 LLM 不能伪造的外部状态，是最强的反 hallucination 信号。
+
+**为什么项 5 是硬前置：**
+Phase 5 Distill 是最容易被 LLM 跳过的步骤（典型"收尾清理"心理），而 distill 失败 → 跨任务学习层（Task 3B 即将引入的 Phase 0 glob）永远是空——闭环断在生产端。项 5 用文件系统作为外部信号，确保 distill 真的发生。
 
 ## 置信度检查协议 (Confidence Check Protocol)
 
@@ -547,11 +551,46 @@ escape_hatch:
 ## 文件结构
 
 ```
-_planning/                    # 任务规划目录 (迭代持久化)
+_planning/                    # 任务规划目录 (迭代持久化, 单次 mission)
 ├── mission_plan.md          # 任务计划 + 成功标准 + 进度日志
 ├── mission_notes.md         # 研究发现 + 决策 + 失败记录 (append-only)
 └── workflow_state.json      # 状态机当前位置 (支持中断恢复)
+
+~/.claude/mission-archive/   # 跨 mission 知识沉淀 (跨项目持久化)
+└── {project-slug}/
+    └── lessons/
+        └── {YYYY-MM-DD}-{topic-kebab}.md   # Phase 5 产出, 单条 ≤150 字
 ```
+
+### Lesson 文件结构 (Phase 5 产出，跨项目持久化)
+
+每个 lesson 文件采用统一 frontmatter，便于后续 (Task 3B) Phase 0 glob 时做关键词匹配：
+
+```markdown
+---
+name: {topic-kebab-case}
+description: 一句话描述，用于 Phase 0 glob 时模糊匹配
+mission_date: YYYY-MM-DD
+keywords: [关键词1, 关键词2, ...]
+---
+
+# Lesson: {一句话核心结论}
+
+**Context:** {本次 mission 的简短背景}
+
+**Lesson (≤150 字):**
+{真正可复用的洞察，不是行动清单}
+{强调"下次遇到 X 类情况要 Y"的可迁移性}
+
+**Source:** Iter N, from {Decisions Made / Self-Reflections / Compliance Checks}
+```
+
+**严格 ≤150 字的理由：** Phase 0 glob 命中时会把 lesson 注入 mission_plan.md 的 Prior Lessons 段（Task 3B 落地后）。超长 lesson 污染上下文。如果一条心得真的需要超过 150 字，说明它是"多条 lesson 的混合"，应当拆开成多个文件而非合并。
+
+**slug 推导规则：**
+- 在 git 仓库内：`git rev-parse --show-toplevel` 末段目录名 → 小写 → kebab-case
+- 不在 git 仓库内：`pwd` 末段目录名 → 小写 → kebab-case
+- 示例：`E:\Yoji\Prism-OS` → `prism-os`；`/Users/foo/My App` → `my-app`
 
 ### mission_plan.md 模板
 
@@ -771,6 +810,39 @@ Phase 4: Debrief (收尾)
 ├── 确认所有 Success Criteria 标记 [x]
 ├── mission_notes.md 保留为历史记录
 └── 如未完全完成，报告剩余工作
+
+---------------------------------------------------------------
+
+Phase 5: Distill (收尾蒸馏 - Mission Accomplished 的硬前置)
+
+├── 5.1 确定 project-slug:
+│      cd 到 git 根目录: `git rev-parse --show-toplevel`
+│      取末段目录名 -> 小写 + kebab-case = {project-slug}
+│      无 git 仓库时: 用 cwd 末段目录名
+│
+├── 5.2 确保 archive 目录存在:
+│      Unix:    mkdir -p "$HOME/.claude/mission-archive/{slug}/lessons"
+│      Windows: %USERPROFILE%\.claude\mission-archive\{slug}\lessons
+│      (PowerShell: New-Item -ItemType Directory -Force -Path ...)
+│
+├── 5.3 从本次 mission_notes.md 提取 Lesson 候选:
+│      扫描以下三段:
+│        - Decisions Made: 哪个决定值得复用？
+│        - Self-Reflections: 哪个失败的根因有跨场景价值？
+│        - Compliance Checks (Verdict ≠ pass): 哪类 drift 应该提前防？
+│      生成 1-3 条候选（不是越多越好，宁缺毋滥）
+│
+├── 5.4 每条候选写入 archive 目录:
+│      文件名: {YYYY-MM-DD}-{topic-kebab-case}.md
+│      内容格式: 见下方 "Lesson 文件结构" 段
+│      Lesson 正文 ≤150 字（强制：超出则压缩或拆条）
+│
+├── 5.5 在 mission_notes.md 追加 ## Distilled Lessons 段:
+│      列出本次产出的 lesson 文件路径 + 一句话摘要
+│
+└── 5.6 Pre-Promise Audit Checklist 项 5 验证:
+       项 5: archive 目录下存在至少 1 个本次 mission 的 lesson 文件
+       项 5 失败 -> 禁止发 promise，回到 5.3 重新蒸馏
 ```
 
 ---

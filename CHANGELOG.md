@@ -8,27 +8,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+**Cross-mission learning layer (Task 3A — Phase 5 Distill)**
+- **Phase 5: Distill** — new phase after Phase 4 Debrief, runs as a HARD prereq for `<promise>Mission Accomplished</promise>`. Scans this mission's `Decisions Made`, `Self-Reflections`, `Compliance Checks (verdict != pass)` and produces 1-3 reusable lessons (each ≤150 chars) written to `~/.claude/mission-archive/{project-slug}/lessons/{YYYY-MM-DD}-{topic}.md`.
+- **Lesson file structure** — frontmatter (`name`, `description`, `mission_date`, `keywords`) + `# Lesson:` headline + `Context` + `Lesson (≤150 字)` body + `Source: Iter N` provenance. Documented in SKILL.md `## 文件结构` section.
+- **`{project-slug}` derivation rule** — `git rev-parse --show-toplevel` last segment, lowercase + kebab-case; falls back to `pwd` basename when not in a git repo.
+- **`## Distilled Lessons` section in mission_notes.md template** (between Open Questions and Audit Trail), recording the lesson files produced this mission with one-sentence summaries.
+
+**Goal-drift detector (Task 2 — Step 3.6 Compliance Check)**
 - **Step 3.6 Compliance Check (Build Pass Path)** — prompt-level self-check inserted between Step 3 Validate (pass) and Step 4 Checkpoint. After build/lint/test passes, the agent collects 3 signals (current `[ ]` task description + `git diff HEAD` + most recent `Decisions Made` entry) and self-asks 2 questions in the main conversation (no subagent needed):
   - Q1: Does the diff fully implement the task? (functionality ≈ task description, not just "compiles")
   - Q2: Are there unplanned side changes? (goal drift signal — out-of-scope file edits, unrequested refactoring, "while I was at it" fixes)
 - Structured Verdict written to `mission_notes.md > Compliance Checks`: `pass` / `needs-revision` / `escalate`.
 - Verdict branching: `pass` → Step 4; `needs-revision` → don't mark task `[x]`, add correction subtask, next iteration; `escalate` → treat as medium error, route into Step 3.5 Self-Reflection with Q1/Q2 answers as input.
-- **新增 `Compliance Checks` section in mission_notes.md template** (between Self-Reflections and Clarifications).
-- **强制5 (Mandate 5)** in SKILL.md MUST section, requiring Compliance Check after every build pass and forbidding `[x]` marking when Verdict ≠ pass.
-- **Pre-Promise Audit Checklist (4-item gate)** before outputting `<promise>Mission Accomplished</promise>`:
+- **`## Compliance Checks` section in mission_notes.md template** (between Self-Reflections and Clarifications).
+
+**Anti-hallucinated-completion gate (Task 1 — Pre-Promise Audit Checklist)**
+- **Pre-Promise Audit Checklist (5-item gate)** before outputting `<promise>Mission Accomplished</promise>`:
   1. All `- [ ]` tasks in mission_plan.md marked `[x]` (internal signal)
   2. All Success Criteria marked `[x]` (internal signal)
   3. `git diff --stat` shows non-empty changes (**external signal** — strongest anti-hallucination check, LLM cannot fabricate)
   4. Build/lint/test executed and passed, traceable in Progress Log (external signal)
-- **"强制4" (Mandate 4)** in SKILL.md MUST section, explicitly requiring all 4 audit items to pass before promise.
-- **`## Audit Trail`** section in mission_notes.md template, recording rejected promise attempts and the audit failures that triggered them.
+  5. Phase 5 Distill produced at least 1 lesson file in `~/.claude/mission-archive/{slug}/lessons/` (**external signal** — filesystem state; closes the cross-mission learning loop)
+- **`## Audit Trail` section in mission_notes.md template**, recording rejected promise attempts and the audit failures that triggered them.
 - **Partial Report fallback**: when any audit item fails, output Partial Report listing the failed item + reason + next step instead of false promise.
 
+**Mandates (SKILL.md MUST section)**
+- **强制4 (Mandate 4)**: must pass all Pre-Promise Audit items before promise.
+- **强制5 (Mandate 5)**: must run Step 3.6 Compliance Check after every build pass; `[x]` marking forbidden when Verdict ≠ pass.
+
 ### Changed
-- SKILL.md `## 三大强制` heading renamed to `## 五大强制` (was `## 四大强制` after Pre-Promise Audit Checklist landed in this same `[Unreleased]` cycle, then bumped to 五大 with Compliance Check).
+- SKILL.md `## 三大强制` heading bumped through `四大` (Task 1) → `五大` (Task 2) to track new mandates.
+- SKILL.md Pre-Promise Audit Checklist: 4-item gate (Task 1) → 5-item gate (Task 3A); rationale paragraph extended to cover items 3/4/5; item 5 hard-prereq rationale added.
 - SKILL.md Step 3 Validate ASCII frame: `如无错误 -> 跳过 Step 3.5` changed to `如无错误 -> 进入 Step 3.6 Compliance Check`.
 - SKILL.md Step 4 Checkpoint ASCII diagram now branches through audit before issuing promise.
-- `references/prompt-template.md` Completion Criteria section rewritten to require 4-item audit (replacing the looser "all [ ] marked + builds successfully" check).
+- `references/prompt-template.md` Completion Criteria section rewritten to require 5-item audit (replacing the looser "all [ ] marked + builds successfully" check).
 - `references/prompt-template.md` Step 4 in iteration rules: added preamble `(Reaching here implies Step 3.6 Compliance Check verdict was pass)` and routes promise through Pre-Promise Audit Checklist.
 
 ### Removed
