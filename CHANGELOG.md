@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Step 3.6 Compliance Check (Build Pass Path)** — prompt-level self-check inserted between Step 3 Validate (pass) and Step 4 Checkpoint. After build/lint/test passes, the agent collects 3 signals (current `[ ]` task description + `git diff HEAD` + most recent `Decisions Made` entry) and self-asks 2 questions in the main conversation (no subagent needed):
+  - Q1: Does the diff fully implement the task? (functionality ≈ task description, not just "compiles")
+  - Q2: Are there unplanned side changes? (goal drift signal — out-of-scope file edits, unrequested refactoring, "while I was at it" fixes)
+- Structured Verdict written to `mission_notes.md > Compliance Checks`: `pass` / `needs-revision` / `escalate`.
+- Verdict branching: `pass` → Step 4; `needs-revision` → don't mark task `[x]`, add correction subtask, next iteration; `escalate` → treat as medium error, route into Step 3.5 Self-Reflection with Q1/Q2 answers as input.
+- **新增 `Compliance Checks` section in mission_notes.md template** (between Self-Reflections and Clarifications).
+- **强制5 (Mandate 5)** in SKILL.md MUST section, requiring Compliance Check after every build pass and forbidding `[x]` marking when Verdict ≠ pass.
 - **Pre-Promise Audit Checklist (4-item gate)** before outputting `<promise>Mission Accomplished</promise>`:
   1. All `- [ ]` tasks in mission_plan.md marked `[x]` (internal signal)
   2. All Success Criteria marked `[x]` (internal signal)
@@ -18,9 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Partial Report fallback**: when any audit item fails, output Partial Report listing the failed item + reason + next step instead of false promise.
 
 ### Changed
-- SKILL.md `## 三大强制` heading renamed to `## 四大强制` to reflect the new mandate.
+- SKILL.md `## 三大强制` heading renamed to `## 五大强制` (was `## 四大强制` after Pre-Promise Audit Checklist landed in this same `[Unreleased]` cycle, then bumped to 五大 with Compliance Check).
+- SKILL.md Step 3 Validate ASCII frame: `如无错误 -> 跳过 Step 3.5` changed to `如无错误 -> 进入 Step 3.6 Compliance Check`.
 - SKILL.md Step 4 Checkpoint ASCII diagram now branches through audit before issuing promise.
 - `references/prompt-template.md` Completion Criteria section rewritten to require 4-item audit (replacing the looser "all [ ] marked + builds successfully" check).
+- `references/prompt-template.md` Step 4 in iteration rules: added preamble `(Reaching here implies Step 3.6 Compliance Check verdict was pass)` and routes promise through Pre-Promise Audit Checklist.
 
 ### Removed
 - **RiderMcp legacy purge**: removed Kotlin Plugin / Unity / PSI / TypeScript Bridge specific content inherited from a previous incarnation of this skill. Affected:

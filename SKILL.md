@@ -65,7 +65,7 @@ planning_dir: "_planning"      # 计划文件目录
   -> 禁止在不确定需求/方案/依赖时盲目实现
 ```
 
-## 四大强制 (MUST)
+## 五大强制 (MUST)
 
 ```
 强制1: 必须在迭代开始时执行 Read-Before-Decide
@@ -83,6 +83,12 @@ planning_dir: "_planning"      # 计划文件目录
 强制4: 必须在发 Mission Accomplished 之前通过 Pre-Promise Audit Checklist
   -> 见下方 "Pre-Promise Audit Checklist (CRITICAL)" 段
   -> 4 项中任一未通过 -> 禁止发 promise，输出 Partial Report
+
+强制5: 必须在每次 build pass 之后执行 Step 3.6 Compliance Check
+  -> 见工作流段的 Step 3.6 框
+  -> 跳过 Compliance Check 等同于跳过 Step 3 Validate
+  -> Verdict 必须写入 mission_notes.md > Compliance Checks
+  -> Verdict ≠ pass 时禁止勾本任务 [x]，禁止进入 Step 4
 ```
 
 ## Pre-Promise Audit Checklist (CRITICAL)
@@ -681,11 +687,45 @@ Phase 0: Initialization (初始化)
 ┌─ Step 3: Validate (验证) ────────────────────────────────────┐
 │  检查代码是否通过验证 (编译/lint/测试)                         │
 │  如有错误 -> 进入 Step 3.5 Self-Reflection                    │
-│  如无错误 -> 跳过 Step 3.5，直接进入 Step 4                   │
+│  如无错误 -> 进入 Step 3.6 Compliance Check                   │
+└──────────────────────────────────────────────────────────────┘
+           |
+           v (build pass 路径)
+┌─ Step 3.6: Compliance Check (Build Pass 后强制执行) ─────────┐
+│  **触发条件**: Step 3 build/lint/test 全部通过                │
+│  **目标**: 验证 diff 不仅"能跑"，而且"实现的就是计划那个任务" │
+│                                                              │
+│  1. 收集三方信号:                                             │
+│     a. 当前迭代正在做的 [ ] 任务（从 mission_plan.md 提取）   │
+│     b. 本次 Execute 阶段产生的 git diff (`git diff HEAD`)     │
+│     c. mission_notes.md > Decisions Made 最近一条（如有）     │
+│                                                              │
+│  2. 自问 2 个问题 (主对话中直接回答，不派 subagent):           │
+│     Q1: 这个 diff 是否完整实现了 a 描述的任务？               │
+│         (不是 "代码能编译"，是 "功能 ≈ 任务描述")             │
+│     Q2: 是否含计划外的"意外改动"? (goal drift 信号)           │
+│         - 文件改动是否都在任务影响范围内？                    │
+│         - 是否引入了任务未要求的重构 / 改名 / "顺便修复"？    │
+│                                                              │
+│  3. 输出 Verdict (写入 mission_notes.md > Compliance Checks):│
+│     - [Iter N] Task: "{任务名}"                              │
+│       Diff files: {列出 git diff 影响的文件}                  │
+│       Q1 (实现完整度): {完整 / 部分 / 偏离}                   │
+│       Q2 (意外改动): {无 / 有 - 列举}                         │
+│       Verdict: {pass / needs-revision / escalate}             │
+│                                                              │
+│  4. 根据 Verdict 分支:                                        │
+│     - pass           -> 进入 Step 4 Checkpoint                │
+│     - needs-revision -> 不勾本任务 [x]                        │
+│                        在 plan 该任务下追加修正子任务         │
+│                        下一迭代继续此任务                     │
+│     - escalate       -> 视为"中等错误"                        │
+│                        触发 Step 3.5 Self-Reflection          │
+│                        Q1/Q2 答案作为 Reflection 输入         │
 └──────────────────────────────────────────────────────────────┘
 
            |
-           v (如果失败)
+           v (如果失败 / escalate)
 ┌─ Step 3.5: Self-Reflection (自我反思) ───────────────────────┐
 │  **触发条件**: Step 3 验证失败                                │
 │                                                              │

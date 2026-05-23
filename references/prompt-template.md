@@ -101,9 +101,40 @@ Calculate average and decide:
 ### Step 3: Validate
 - Check if code compiles/builds successfully
 - If errors, enter Step 3.5 Self-Reflection
+- If pass, enter Step 3.6 Compliance Check
+
+### Step 3.6: Compliance Check (Build Pass Path)
+**Trigger**: When Step 3 build/lint/test passes
+**Goal**: Verify the diff actually implements the planned task (not just "code compiles")
+
+1. Collect 3 signals:
+   a. Current `[ ]` task description from mission_plan.md
+   b. Current iteration's git diff (`git diff HEAD`)
+   c. Most recent `Decisions Made` entry from mission_notes.md (if any)
+
+2. Self-ask 2 questions (answer in main conversation, no subagent needed):
+   Q1: Does this diff fully implement task (a)?
+       (Not "compiles", but "functionality ≈ task description")
+   Q2: Are there unplanned "side changes"? (goal drift signal)
+       - Are all modified files within task scope?
+       - Any unrequested refactoring / renaming / "while I'm at it" fixes?
+
+3. Output Verdict to mission_notes.md > Compliance Checks:
+   - [Iter N] Task: "{name}"
+     Diff files: {list of files in git diff}
+     Q1 (completeness): {complete / partial / drift}
+     Q2 (side changes): {none / found - list}
+     Verdict: {pass / needs-revision / escalate}
+
+4. Branch on Verdict:
+   - pass           -> proceed to Step 4
+   - needs-revision -> do NOT mark task [x]; append correction subtask under
+                       the task in plan; next iteration continues this task
+   - escalate       -> treat as "medium error"; trigger Step 3.5 Self-Reflection
+                       (feed Q1/Q2 answers as Reflection input)
 
 ### Step 3.5: Self-Reflection
-**Trigger**: When Step 3 validation fails
+**Trigger**: When Step 3 validation fails (or Step 3.6 escalates)
 
 1. Generate reflection (2-3 sentences):
    - Why did it fail? (Root cause)
@@ -123,10 +154,13 @@ Calculate average and decide:
      Status: {fixed / next iteration / waiting}
 
 ### Step 4: Checkpoint
+- (Reaching here implies Step 3.6 Compliance Check verdict was `pass`)
 - Update Progress Log table
 - Decide: All Success Criteria complete?
-  - Yes + build passes -> Output completion flag
-  - No -> Continue next iteration
+  - Yes -> run Pre-Promise Audit Checklist (4 items, see SKILL.md)
+    - All 4 pass -> Output `<promise>Mission Accomplished</promise>`
+    - Any fail   -> Output Partial Report + append result to `## Audit Trail`
+  - No  -> Continue next iteration
 
 ---------------------------------------------------------------
                          Task Breakdown
@@ -408,6 +442,21 @@ Implement order reward distribution feature, involving Order + Reward modules
   Reflection: orderData not initialized when accessed, hook runs before data fetch completes, need to add loading state check
   Strategy: Record pending
   Status: Next iteration
+
+## Compliance Checks
+[Step 3.6 verdicts per build-pass iteration - structured goal-drift detector]
+- [Iter N] Task: "Create OrderRefundService.ts"
+  Diff files: src/modules/order/services/OrderRefundService.ts (new), src/modules/order/index.ts (export)
+  Q1 (completeness): complete
+  Q2 (side changes): none
+  Verdict: pass
+
+- [Iter N+1] Task: "Add refund button to OrderDetailPage"
+  Diff files: src/pages/OrderDetailPage.tsx, src/pages/OrderListPage.tsx (unplanned)
+  Q1 (completeness): complete
+  Q2 (side changes): found - OrderListPage.tsx was not in task scope ("while I was at it" refactor)
+  Verdict: escalate
+  -> triggered Step 3.5 Self-Reflection; revert OrderListPage.tsx change, log as Decision
 
 ## Clarifications
 [User clarification records - from confidence check results]
