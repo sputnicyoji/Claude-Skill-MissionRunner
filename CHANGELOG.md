@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Pre-Promise Audit Checklist (4-item gate)** before outputting `<promise>Mission Accomplished</promise>`:
+  1. All `- [ ]` tasks in mission_plan.md marked `[x]` (internal signal)
+  2. All Success Criteria marked `[x]` (internal signal)
+  3. `git diff --stat` shows non-empty changes (**external signal** — strongest anti-hallucination check, LLM cannot fabricate)
+  4. Build/lint/test executed and passed, traceable in Progress Log (external signal)
+- **"强制4" (Mandate 4)** in SKILL.md MUST section, explicitly requiring all 4 audit items to pass before promise.
+- **`## Audit Trail`** section in mission_notes.md template, recording rejected promise attempts and the audit failures that triggered them.
+- **Partial Report fallback**: when any audit item fails, output Partial Report listing the failed item + reason + next step instead of false promise.
+
+### Changed
+- SKILL.md `## 三大强制` heading renamed to `## 四大强制` to reflect the new mandate.
+- SKILL.md Step 4 Checkpoint ASCII diagram now branches through audit before issuing promise.
+- `references/prompt-template.md` Completion Criteria section rewritten to require 4-item audit (replacing the looser "all [ ] marked + builds successfully" check).
+
 ### Removed
 - **RiderMcp legacy purge**: removed Kotlin Plugin / Unity / PSI / TypeScript Bridge specific content inherited from a previous incarnation of this skill. Affected:
   - `SKILL.md` frontmatter description (removed the "RiderMcp projects" activation line)

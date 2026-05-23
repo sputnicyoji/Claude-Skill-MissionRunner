@@ -151,12 +151,19 @@ List tasks by Phase:
                         Completion Criteria
 ---------------------------------------------------------------
 
-Output completion flag ONLY when ALL conditions are met:
-1. All [ ] in mission_plan.md marked as [x]
-2. Code compiles/builds successfully
-3. Related skill constraints followed
+Output completion flag ONLY when ALL 4 Pre-Promise Audit items pass:
 
-On completion, output: <promise>Mission Accomplished</promise>
+1. mission_plan.md: all `- [ ]` tasks marked `[x]`
+2. mission_plan.md: all Success Criteria marked `[x]`
+3. **External signal:** `git diff --stat` shows non-empty changes (LLM cannot fabricate this — strongest anti-hallucination check)
+4. **External signal:** Build/lint/test commands actually executed and passed (traceable in Progress Log: must contain `verified: pass` or equivalent record for the latest entry)
+
+If any of the 4 fails:
+- Do NOT output `<promise>Mission Accomplished</promise>`
+- Output Partial Report instead, including: which audit item failed, why, suggested next step
+- Append the audit result to mission_notes.md `## Audit Trail` section
+
+On full pass, output: <promise>Mission Accomplished</promise>
 
 If max iterations reached without completion:
 - Report completed tasks
@@ -411,6 +418,12 @@ Implement order reward distribution feature, involving Order + Reward modules
 ## Open Questions
 [Unresolved questions]
 - Should refund support partial amount?
+
+## Audit Trail
+[Pre-Promise Audit results per Mission Accomplished attempt - external signal record]
+- [Iter N, Attempt M] Audit failed at item 3 (git diff empty)
+  -> Suggested action: re-verify Iteration N actually wrote files, not just "claimed completion"
+- [Iter N+1, Attempt 1] All 4 items passed -> promise issued
 ```
 
 ---

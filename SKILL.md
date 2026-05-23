@@ -65,7 +65,7 @@ planning_dir: "_planning"      # 计划文件目录
   -> 禁止在不确定需求/方案/依赖时盲目实现
 ```
 
-## 三大强制 (MUST)
+## 四大强制 (MUST)
 
 ```
 强制1: 必须在迭代开始时执行 Read-Before-Decide
@@ -79,7 +79,30 @@ planning_dir: "_planning"      # 计划文件目录
 强制3: 必须在任务完成时输出 Mission Accomplished
   -> 格式: <promise>Mission Accomplished</promise>
   -> 只有所有任务完成且验证通过才能输出
+
+强制4: 必须在发 Mission Accomplished 之前通过 Pre-Promise Audit Checklist
+  -> 见下方 "Pre-Promise Audit Checklist (CRITICAL)" 段
+  -> 4 项中任一未通过 -> 禁止发 promise，输出 Partial Report
 ```
+
+## Pre-Promise Audit Checklist (CRITICAL)
+
+**在输出 `<promise>Mission Accomplished</promise>` 之前必须逐项核对，4 项全部通过才允许发 promise。**
+
+| # | 检查项 | 信号来源 | 通过条件 |
+|---|--------|----------|----------|
+| 1 | mission_plan.md 所有 Phase 任务标记 [x] | 内部（plan 文件） | 全文搜 `^- \[ \]` 应为 0 行 |
+| 2 | mission_plan.md 所有 Success Criteria 标记 [x] | 内部（plan 文件） | Success Criteria 段无 `[ ]` |
+| 3 | `git diff --stat` / `git status` 显示有实质改动 | **外部信号**（git） | 至少 1 个文件 modified/added |
+| 4 | Build/lint/test 命令真实执行并通过 | 外部信号（命令输出） | Progress Log 最近一项含 `verified: pass` 或同等记录 |
+
+**任一项未通过：**
+- 不输出 `<promise>Mission Accomplished</promise>`
+- 改为输出 Partial Report，列出：哪一项未通过、原因、下一步建议
+- 把审计结果追加到 mission_notes.md 新增的 `## Audit Trail` 段
+
+**为什么必须有"外部信号"（项 3、项 4）：**
+LLM 自报"已完成"是不可信的——存在 hallucinate 完成度的常见失败模式（checkboxes 全勾但 git diff 是空的）。`git diff` 和命令执行输出是 LLM 不能伪造的外部状态，是最强的反 hallucination 信号。
 
 ## 置信度检查协议 (Confidence Check Protocol)
 
@@ -694,7 +717,11 @@ Phase 0: Initialization (初始化)
 │  | N | Phase X | 完成了 xxx, 遇到 yyy | Done/Blocked |        │
 │                                                              │
 │  判断: 所有任务完成？                                         │
-│  ├─ 是 + 验证通过 -> <promise>Mission Accomplished</promise>  │
+│  ├─ 是 -> 执行 Pre-Promise Audit Checklist (4 项)             │
+│  │       ├─ 4 项全通过 -> <promise>Mission Accomplished</promise>│
+│  │       └─ 任一未通过 -> 输出 Partial Report                 │
+│  │                       追加审计结果到 mission_notes.md      │
+│  │                       > Audit Trail 段                     │
 │  └─ 否 -> 继续下一迭代                                        │
 └──────────────────────────────────────────────────────────────┘
 
