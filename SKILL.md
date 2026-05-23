@@ -2,13 +2,13 @@
 
 name: mission-runner
 description: |
-  大型模块自动化开发专家。整合 task-planner + ralph-loop + PIR 的复合能力。
-  当处理以下场景时激活：
-  - 大型模块开发：需要创建/修改多个文件（3+）
-  - 多层架构实现：同时涉及 Data/Service/UI 三层
-  - 跨模块重构：影响多个子系统
-  - 复杂功能实现：需要多文件协同
-  提供: (1) 自动迭代执行 (2) Read-Before-Decide 防丢失 (3) 本地文件记忆 (4) 验证检查
+  Large-scale module automation expert. Integrates task-planner + ralph-loop + PIR capabilities.
+  Activates for these scenarios:
+  - Large module development: Creating/modifying multiple files (3+)
+  - Multi-layer architecture: Simultaneous Data/Service/UI implementation
+  - Cross-module refactoring: Affecting multiple subsystems
+  - Complex feature implementation: Multi-file coordination required
+  Provides: (1) Auto-iterative execution (2) Read-Before-Decide safeguard (3) Local file memory (4) Validation checks
 ---
 
 
@@ -660,6 +660,7 @@ Phase 0: Initialization (初始化)
 │  如有错误 -> 进入 Step 3.5 Self-Reflection                    │
 │  如无错误 -> 跳过 Step 3.5，直接进入 Step 4                   │
 └──────────────────────────────────────────────────────────────┘
+
            |
            v (如果失败)
 ┌─ Step 3.5: Self-Reflection (自我反思) ───────────────────────┐

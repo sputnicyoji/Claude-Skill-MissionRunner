@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+- **RiderMcp legacy purge**: removed Kotlin Plugin / Unity / PSI / TypeScript Bridge specific content inherited from a previous incarnation of this skill. Affected:
+  - `SKILL.md` frontmatter description (removed the "RiderMcp projects" activation line)
+  - `SKILL.md` "RiderMcp Project-Specific Error Patterns" section (9 Kotlin/Unity error categories)
+  - `SKILL.md` "RiderMcp Project-Specific Validation" section (gradle build / Plugin Verifier / Rider 2025.3.1 notes)
+  - `references/error-patterns.md` (entire file, 9 Kotlin/Unity error pattern templates)
+  - `references/ridermcp-constraints.md` (entire file)
+- **Rationale**: mission-runner is a general-purpose multi-file automation skill; the RiderMcp content was context noise in non-RiderMcp projects (every skill activation injected unrelated concepts like ReadAction, WriteCommandAction, Unity Play mode).
+
 ## [1.0.0] - 2024-01-15
 
 ### Added
