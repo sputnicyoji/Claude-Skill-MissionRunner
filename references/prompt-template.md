@@ -117,9 +117,12 @@ Calculate average and decide:
 ### Step 2: Execute
 - Execute next [ ] task (one at a time!)
 - Follow project constraints and related skill specs
-- After completion, immediately update mission_plan.md:
-  - Mark task [x]
-  - Update Progress Log
+- After completion, update mission_plan.md:
+  - **Do NOT mark `[x]` yet** (Mandate 5). `[x]` is reserved for Step 3.6
+    verdict=pass. Marking here would let the LLM claim done before build/lint
+    and Compliance Check, which is exactly the v1.0 "I claim done" failure
+    mode the v1.1 protocol exists to prevent.
+  - Update Progress Log table only (e.g. `Iter N: completed task X, awaiting verify`).
 
 ### Step 3: Validate
 - Check if code compiles/builds successfully
@@ -469,10 +472,13 @@ Implement order reward distribution feature, involving Order + Reward modules
   Source: Iter 2 Compliance Checks (escalate verdict)
 
 ## Audit Trail
-[Pre-Promise Audit results per Mission Accomplished attempt - external signal record]
+[Pre-Promise Audit results per Mission Accomplished attempt - external signal record.
+ Also holds a single index line per escape-hatch abandon; the authoritative
+ abandon reason lives in `## Deviations & Reasons`.]
 - [Iter N, Attempt M] Audit failed at item 3 (git diff empty)
   -> Suggested action: re-verify Iteration N actually wrote files, not just "claimed completion"
 - [Iter N+1, Attempt 1] All 5 items passed -> promise issued
+- [Iter N+2] No promise issued — abandoned, see Deviations & Reasons
 
 ## Deviations & Reasons
 [Escape Hatch / state-machine deviation log — used when mode switches to free_form

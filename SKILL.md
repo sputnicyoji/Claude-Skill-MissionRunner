@@ -91,11 +91,15 @@ planning_dir: "_planning"      # 计划文件目录
   -> 跳过 Compliance Check 等同于跳过 Step 3 Validate
   -> Verdict 必须写入 mission_notes.md > Compliance Checks
   -> Verdict ≠ pass 时禁止勾本任务 [x]，禁止进入 Step 4 "all done" 分支
+
+注: 强制 2 / 强制 4 / 强制 5 在 Escape Hatch (mode=free_form) 下仍然生效
+    —— 它们是协议层硬约束, 与状态机的"建议路径"无关。详见 Escape Hatch 段
+    "escape hatch 不豁免的硬约束 (CRITICAL)"。
 ```
 
 ## Pre-Promise Audit Checklist (CRITICAL)
 
-**在输出 `<promise>Mission Accomplished</promise>` 之前必须逐项核对，5 项全部通过才允许发 promise。**
+**在输出 `<promise>Mission Accomplished</promise>` 之前必须逐项核对，5 项全部通过才允许发 promise。本 checklist 在 Escape Hatch (mode=free_form) 下仍然生效——见 Escape Hatch 段。**
 
 | # | 检查项 | 信号来源 | 通过条件 |
 |---|--------|----------|----------|
@@ -626,9 +630,10 @@ escape_hatch:
 简言之：**escape hatch 让状态机沉默，不让 audit 沉默**。LLM 想发 `<promise>Mission Accomplished</promise>`，仍然必须先跑完 Phase 4 → Phase 5 → 5 项 Audit；任一外部信号缺失就只能输出 Partial Report。
 
 如果 escape hatch 触发后 Agent 判断"任务确实无法完成"（如需求被推翻、依赖被废弃）— 正确做法是**主动退出而非发 promise**：
-1. 在 mission_notes.md 的 `## Deviations & Reasons` 段说明退出原因
-2. 在 `## Audit Trail` 段写一条 "abandoned (reason: ...)" 而不是 promise
+1. 在 mission_notes.md 的 `## Deviations & Reasons` 段记录 `Outcome: abandoned`，说明退出原因 (这是 abandon 的权威记录段)
+2. 在 `## Audit Trail` 段追加一条索引行 `[Iter N] No promise issued — abandoned, see Deviations & Reasons` (便于将来扫 mission 状态时一站式查到)
 3. 把 mission_plan.md 未勾任务保留为 `[ ]`，供后续 mission 接手
+4. 输出 Partial Report (而不是 `<promise>Mission Accomplished</promise>`)，明确告知 caller 任务已 abandon
 
 ---
 
@@ -769,10 +774,12 @@ keywords: [关键词1, 关键词2, ...]
   Source: Iter N (Decisions Made / Self-Reflections / Compliance Checks)
 
 ## Audit Trail
-[Pre-Promise Audit 失败记录 - 每次被拒的 promise 尝试]
+[Pre-Promise Audit 失败记录 - 每次被拒的 promise 尝试; 也容纳 escape-hatch abandon 的索引行
+ (退出原因的权威记录在 Deviations & Reasons, 此处仅留一条交叉引用)]
 - [Iter N, Attempt M] Audit failed at item X (原因)
   -> Suggested action: ...
 - [Iter N+1, Attempt 1] All 5 items passed -> promise issued
+- [Iter N+2] No promise issued — abandoned, see Deviations & Reasons
 
 ## Deviations & Reasons
 [Escape Hatch / 状态机偏离记录 — mode 切换到 free_form 或临时绕过推荐路径时填]
