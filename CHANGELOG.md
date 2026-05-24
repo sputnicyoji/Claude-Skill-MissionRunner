@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed (2026-05-24)
+
+**Cursor support dropped**
+- Deleted `.cursorrules`, `.cursor/rules/mission-runner.mdc`, `.cursor/rules/mission-runner-lite.mdc`, and the now-empty `.cursor/` directory.
+- README.md / README_zh-CN.md / README_ja.md: Cursor badge, Cursor installation section, Cursor entries in Repository Structure, and Cursor acknowledgement removed.
+- **Rationale**: the Cursor rule files were never updated to the v1.1 protocol (Compliance Check, Pre-Promise Audit, Phase 5 Distill, Prior Lessons glob, Mandates 4/5). Maintaining a v1.0 fork in the same repo was a long-standing inconsistency — see the "v1.0 → v1.1 sync-pending banners" entry in the v1.1 Hardening Pass below. The right move was to delete the half-supported variant rather than ship a permanently stale alternate skin.
+- Going forward the skill targets Claude Code only.
+
+### Fixed (2026-05-24)
+
+- **SKILL.md Phase 0 step 4 `mkdir -p _planning` broke on PowerShell.** Phase 5.2 already split this into Unix-like vs PowerShell forms (F21 in the v1.1 hardening pass), but Phase 0 step 4 was missed in the same sweep. Now matches Phase 5.2 with both shell variants and an explicit "do not mix" note. Without the fix, the very first command of a mission would error out (`A positional parameter cannot be found`) on Windows.
+- **SKILL.md `Task(subagent_type=...)` shown as Python code.** The Tool Selection Strategy section rendered subagent invocations as Python function calls — a representation that risks the agent serialising them as text strings rather than issuing actual `Task` tool calls. Rewritten as a neutral field-mapping description ("call Task tool, set `subagent_type` to ...") with an explicit warning not to emit the lines as string output.
+- **`examples/_planning/workflow_state.json` timestamp 2024-01-15 contradicted `mission_plan.md` (2026-05-15 lesson reference, Iter 4 in progress).** Bumped to `2026-05-15T15:30:00Z` so the three example files share one timeline.
+
 ### Added
 
 **Cross-mission learning layer (Task 3B — Phase 0 historical lesson glob, consumer side)**
@@ -98,8 +112,8 @@ Following an extra-high effort recall-mode code review that surfaced 15 verified
 **Discovery surface (S3, S4, S5)**
 - `README.md`: Key Features table gains rows for Compliance Check / Pre-Promise Audit / Phase 5 Distill + archive. Core Workflow diagram updated to show the v1.1 flow including Step 3.6, Phase 5, and the 5-item audit gate.
 - `README_zh-CN.md`: synced with README.md (Key Features + Core Workflow translated).
-- `README_ja.md`: Key Features gains v1.1 rows (translated); a notice section directs Japanese readers to `SKILL.md` and English `README.md` for canonical v1.1 spec (Core Workflow diagram in this file remains at v1.0 wording pending a proper translation pass).
-- `.cursorrules`, `.cursor/rules/mission-runner.mdc`, `.cursor/rules/mission-runner-lite.mdc`: added prominent v1.0 → v1.1 sync-pending banners pointing Cursor users to `SKILL.md` for canonical v1.1 spec. Cursor rule file rewrite is tracked as future work.
+- `README_ja.md`: Key Features gains v1.1 rows (translated); a notice section directs Japanese readers to `SKILL.md` and English `README.md` for canonical v1.1 spec (Core Workflow diagram in this file remains at v1.0 wording pending a proper translation pass). *(Resolved 2026-05-24: Core Workflow translated to v1.1; v1.0 fallback notice removed. See the "Cursor support dropped" Removed entry at the top of this section.)*
+- `.cursorrules`, `.cursor/rules/mission-runner.mdc`, `.cursor/rules/mission-runner-lite.mdc`: added prominent v1.0 → v1.1 sync-pending banners pointing Cursor users to `SKILL.md` for canonical v1.1 spec. Cursor rule file rewrite is tracked as future work. *(Resolved 2026-05-24 by deletion: Cursor support dropped rather than re-synced; see the Removed entry at the top of this section.)*
 
 **Other (F5, F6)**
 - F5 — `references/prompt-template.md` Step 4 preamble previously asserted "Reaching here implies Step 3.6 verdict=pass", which is false on the Step 3 fail → Step 3.5 medium → Step 4 path. Reworded to "Reached on either path: (a) Step 3.6 verdict=pass and `[x]` just marked, or (b) Step 3.5 medium error returning to checkpoint with task left as `[ ]`".

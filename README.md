@@ -4,7 +4,6 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-Compatible-blueviolet)](https://claude.ai/code)
-[![Cursor](https://img.shields.io/badge/Cursor-Compatible-blue)](https://cursor.sh)
 [![GitHub stars](https://img.shields.io/github/stars/sputnicyoji/Claude-Skill-MissionRunner?style=social)](https://github.com/sputnicyoji/Claude-Skill-MissionRunner)
 
 
@@ -44,7 +43,10 @@ Mission Runner is an AI coding assistant skill that enables autonomous execution
 
 ## Installation
 
-### For Claude Code
+Mission Runner targets Claude Code. Earlier releases shipped Cursor rule files
+(`.cursorrules` / `.cursor/rules/*.mdc`) but those were never updated to the
+v1.1 protocol (Compliance Check, Pre-Promise Audit, Phase 5 Distill, Prior
+Lessons glob) and have been removed.
 
 ```bash
 # Clone the repository
@@ -54,20 +56,6 @@ git clone https://github.com/sputnicyoji/Claude-Skill-MissionRunner.git
 mkdir -p .claude/skills/mission-runner
 cp Claude-Skill-MissionRunner/SKILL.md .claude/skills/mission-runner/
 cp -r Claude-Skill-MissionRunner/references .claude/skills/mission-runner/
-```
-
-### For Cursor
-
-```bash
-# Option 1: Use .cursorrules (root-level, recommended)
-cp Claude-Skill-MissionRunner/.cursorrules /path/to/your/project/
-
-# Option 2: Use .cursor/rules/ (modular)
-mkdir -p /path/to/your/project/.cursor/rules
-cp Claude-Skill-MissionRunner/.cursor/rules/mission-runner.mdc /path/to/your/project/.cursor/rules/
-
-# Or use the lite version for quick reference:
-cp Claude-Skill-MissionRunner/.cursor/rules/mission-runner-lite.mdc /path/to/your/project/.cursor/rules/
 ```
 
 ## Quick Start
@@ -202,10 +190,6 @@ Claude-Skill-MissionRunner/
 ├── SKILL.md                          # Claude Code skill (main)
 ├── references/
 │   └── prompt-template.md            # Detailed prompt templates
-├── .cursorrules                      # Cursor root-level rules
-├── .cursor/rules/
-│   ├── mission-runner.mdc            # Cursor full version
-│   └── mission-runner-lite.mdc       # Cursor quick reference
 ├── examples/
 │   └── _planning/                    # Example planning files
 ├── README.md
@@ -230,7 +214,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - [Anthropic](https://anthropic.com) for Claude Code
-- [Cursor](https://cursor.sh) for the AI-powered editor
 - The AI agent research community
 - All contributors and users
 

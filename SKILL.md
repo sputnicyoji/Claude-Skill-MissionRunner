@@ -262,17 +262,19 @@ elif 错误类型 == 复杂 or 连续失败 3 次:
 | Research | 设计实现方案 | `Task(subagent_type="Plan")` |
 | Verification | 代码审查 | `Task(subagent_type="code-reviewer")` |
 
-### Task subagent 调用模板 (Claude Code)
+### Task subagent 调用方式 (Claude Code)
 
-```python
-# 探索代码库
-Task(subagent_type="Explore",
-     prompt="探索 {目标模块} 的数据流和核心类")
+不是 Python 代码; 是描述给主对话 LLM 如何发起 Task tool 调用的指引:
 
-# 架构设计
-Task(subagent_type="Plan",
-     prompt="基于探索结果，设计 {新功能} 的实现蓝图")
-```
+- 探索代码库: 调用 Task tool, 设置 `subagent_type` 为 `Explore`,
+  `prompt` 字段填"探索 {目标模块} 的数据流和核心类"等等。
+- 架构设计: 调用 Task tool, 设置 `subagent_type` 为 `Plan`,
+  `prompt` 字段填"基于探索结果, 设计 {新功能} 的实现蓝图"。
+- 代码审查: 调用 Task tool, 设置 `subagent_type` 为 `code-reviewer`,
+  `prompt` 字段填具体审查目标。
+
+不要把上面这些当作字符串去输出或写入文件——它们是工具调用的字段映射,
+应该通过实际的 Task tool_use 发起。
 
 ### 禁止的 Research 模式
 
@@ -747,7 +749,11 @@ Phase 0: Initialization (初始化)
 │           - 命中阈值: 任务描述中出现 ≥1 个 keyword 或 description 关键词
 │      把命中的 lesson (最多 5 条) 完整内容缓存待用
 │
-├── 4. 创建 _planning/ 目录: mkdir -p _planning
+├── 4. 创建 _planning/ 目录 (与 Phase 5.2 同样的 shell 分支规则):
+│      Unix-like (Bash/zsh): mkdir -p _planning
+│      Windows PowerShell:   New-Item -ItemType Directory -Force -Path _planning
+│      **不要混用**: Agent 根据当前 shell tool 类型选择对应命令; `mkdir -p`
+│      在 PowerShell 中会报 "A positional parameter cannot be found" 错误
 │
 ├── 5. 创建 mission_plan.md (任务计划):
 │      包含新增 ## Prior Lessons 段:

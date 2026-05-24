@@ -4,7 +4,6 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-Compatible-blueviolet)](https://claude.ai/code)
-[![Cursor](https://img.shields.io/badge/Cursor-Compatible-blue)](https://cursor.sh)
 [![GitHub stars](https://img.shields.io/github/stars/sputnicyoji/Claude-Skill-MissionRunner?style=social)](https://github.com/sputnicyoji/Claude-Skill-MissionRunner)
 
 [English](README.md) | [简体中文](README_zh-CN.md) | **日本語**
@@ -25,8 +24,6 @@ Mission Runner は、複雑なマルチファイル開発タスクを自律的�
 | **Pre-Promise Audit (5 項目ゲート)** | promise 前のハードゲート、LLM が偽造できない 3 つの外部信号 (git diff / ビルド出力 / lesson ファイル) を含む |
 | **Phase 5 Distill + クロスミッション・アーカイブ** | 各ミッションが 1-3 件の ≤150 文字 lesson を `~/.claude/mission-archive/{slug}/lessons/` に書き込み、後続ミッションが Phase 0 で Prior Lessons として glob |
 
-> **注**: 本日本語版は v1.0 ベースの説明を保持しています。v1.1 で追加された Compliance Check / Pre-Promise Audit / Phase 5 Distill の詳細仕様は [SKILL.md](SKILL.md) および英語版 [README.md](README.md) の Core Workflow 図を参照してください。
-
 ## 使用すべき場面
 
 | シナリオ | 例 |
@@ -45,7 +42,10 @@ Mission Runner は、複雑なマルチファイル開発タスクを自律的�
 
 ## インストール
 
-### Claude Code ユーザー向け
+Mission Runner は Claude Code 向けです。初期バージョンには Cursor 用ルール
+ファイル（`.cursorrules` / `.cursor/rules/*.mdc`）が同梱されていましたが、
+v1.1 プロトコル（Compliance Check / Pre-Promise Audit / Phase 5 Distill /
+Prior Lessons glob）への追従が行われなかったため、本リポジトリから削除されました。
 
 ```bash
 # リポジトリをクローン
@@ -55,20 +55,6 @@ git clone https://github.com/sputnicyoji/Claude-Skill-MissionRunner.git
 mkdir -p .claude/skills/mission-runner
 cp Claude-Skill-MissionRunner/SKILL.md .claude/skills/mission-runner/
 cp -r Claude-Skill-MissionRunner/references .claude/skills/mission-runner/
-```
-
-### Cursor ユーザー向け
-
-```bash
-# オプション 1: .cursorrules を使用 (ルートレベル、推奨)
-cp Claude-Skill-MissionRunner/.cursorrules /path/to/your/project/
-
-# オプション 2: .cursor/rules/ を使用 (モジュラー)
-mkdir -p /path/to/your/project/.cursor/rules
-cp Claude-Skill-MissionRunner/.cursor/rules/mission-runner.mdc /path/to/your/project/.cursor/rules/
-
-# または、クイックリファレンス用のライト版を使用:
-cp Claude-Skill-MissionRunner/.cursor/rules/mission-runner-lite.mdc /path/to/your/project/.cursor/rules/
 ```
 
 ## クイックスタート
@@ -109,20 +95,34 @@ _planning/
 
 ```
 Phase 0: 初期化
+├── タスクを解析
+├── {project-slug} を決定                            (v1.1: クロスミッション名前空間)
+├── ~/.claude/mission-archive/{slug}/lessons/ を glob (v1.1: 履歴 lesson のヒット)
 ├── _planning/ ディレクトリを作成
-├── mission_plan.md を作成 (タスク + 成功基準)
-└── mission_notes.md を作成 (空のノート)
+├── mission_plan.md を作成 (## Prior Lessons セクションを glob 結果から注入)
+└── mission_notes.md を作成 (全標準セクション)
 
 各反復:
-├── Step 1: 決定前に読み取り (目標にアンカー)
-├── Step 1.5: 信頼度チェック (4次元)
-├── Step 2: 実行 (1タスクのみ)
+├── Step 1: 決定前に読み取り (Prior Lessons + notes を読み、信頼度チェックへ供給)
+├── Step 1.5: 信頼度チェック (4 次元)
+├── Step 2: 実行 (1 タスクのみ; **この時点では [x] を付けない**)
 ├── Step 3: 検証 (コンパイル/lint/テスト)
-├── Step 3.5: 自己反省 (検証失敗時)
-└── Step 4: チェックポイント (進捗更新)
+│      ├── 失敗 -> Step 3.5
+│      └── 成功 -> Step 3.6
+├── Step 3.5: 自己反省 (検証失敗 または Step 3.6 escalate 時)
+├── Step 3.6: コンプライアンスチェック (v1.1: diff vs プランのゴールドリフト検証)
+│      ├── pass -> [x] を付与 + Step 4
+│      ├── needs-revision -> [x] を付与せず、次反復で同タスクを継続
+│      └── escalate -> Step 3.5
+└── Step 4: チェックポイント
+       ├── 未完了 -> 次反復へ
+       └── 完了 (全 [x]) -> Phase 4 Debrief -> Phase 5 Distill -> 5 項目 Audit
 
-完了:
-└── 出力: <promise>Mission Accomplished</promise>
+Phase 4: Debrief        (Success Criteria の全 [x] を確認)
+Phase 5: Distill        (v1.1: 1-3 件の ≤150 文字 lesson を archive に蒸留)
+Pre-Promise Audit       (v1.1: 5 項目ハードゲート、うち 3 つは外部信号)
+├── 5 項目全 pass -> <promise>Mission Accomplished</promise>
+└── いずれか fail -> Partial Report + ## Audit Trail に追記
 ```
 
 ## 信頼度チェックプロトコル
@@ -183,10 +183,6 @@ Claude-Skill-MissionRunner/
 ├── SKILL.md                          # Claude Code スキル (メイン)
 ├── references/
 │   └── prompt-template.md            # 詳細プロンプトテンプレート
-├── .cursorrules                      # Cursor ルートレベルルール
-├── .cursor/rules/
-│   ├── mission-runner.mdc            # Cursor フル版
-│   └── mission-runner-lite.mdc       # Cursor ライト版
 ├── examples/
 │   └── _planning/                    # サンプル計画ファイル
 ├── README.md
@@ -211,7 +207,6 @@ Claude-Skill-MissionRunner/
 ## 謝辞
 
 - [Anthropic](https://anthropic.com) の Claude Code
-- [Cursor](https://cursor.sh) AI パワードエディタ
 - AI エージェント研究コミュニティ
 - すべてのコントリビューターとユーザー
 

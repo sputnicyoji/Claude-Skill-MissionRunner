@@ -4,7 +4,6 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-Compatible-blueviolet)](https://claude.ai/code)
-[![Cursor](https://img.shields.io/badge/Cursor-Compatible-blue)](https://cursor.sh)
 [![GitHub stars](https://img.shields.io/github/stars/sputnicyoji/Claude-Skill-MissionRunner?style=social)](https://github.com/sputnicyoji/Claude-Skill-MissionRunner)
 
 [English](README.md) | **简体中文** | [日本語](README_ja.md)
@@ -43,7 +42,10 @@ Mission Runner 是一个 AI 编码助手技能，能够自主执行复杂的多�
 
 ## 安装
 
-### Claude Code 用户
+Mission Runner 面向 Claude Code。早期版本曾附带 Cursor 规则文件
+（`.cursorrules` / `.cursor/rules/*.mdc`），但这些文件未跟上 v1.1 协议
+（Compliance Check / Pre-Promise Audit / Phase 5 Distill / Prior Lessons glob），
+已在本仓库中移除。
 
 ```bash
 # 克隆仓库
@@ -53,20 +55,6 @@ git clone https://github.com/sputnicyoji/Claude-Skill-MissionRunner.git
 mkdir -p .claude/skills/mission-runner
 cp Claude-Skill-MissionRunner/SKILL.md .claude/skills/mission-runner/
 cp -r Claude-Skill-MissionRunner/references .claude/skills/mission-runner/
-```
-
-### Cursor 用户
-
-```bash
-# 方式 1: 使用 .cursorrules (根目录级别，推荐)
-cp Claude-Skill-MissionRunner/.cursorrules /path/to/your/project/
-
-# 方式 2: 使用 .cursor/rules/ (模块化)
-mkdir -p /path/to/your/project/.cursor/rules
-cp Claude-Skill-MissionRunner/.cursor/rules/mission-runner.mdc /path/to/your/project/.cursor/rules/
-
-# 或使用精简版快速参考:
-cp Claude-Skill-MissionRunner/.cursor/rules/mission-runner-lite.mdc /path/to/your/project/.cursor/rules/
 ```
 
 ## 快速开始
@@ -195,10 +183,6 @@ Claude-Skill-MissionRunner/
 ├── SKILL.md                          # Claude Code 技能 (主文件)
 ├── references/
 │   └── prompt-template.md            # 详细 Prompt 模板
-├── .cursorrules                      # Cursor 根级规则
-├── .cursor/rules/
-│   ├── mission-runner.mdc            # Cursor 完整版
-│   └── mission-runner-lite.mdc       # Cursor 精简版
 ├── examples/
 │   └── _planning/                    # 示例规划文件
 ├── README.md
@@ -223,7 +207,6 @@ Claude-Skill-MissionRunner/
 ## 致谢
 
 - [Anthropic](https://anthropic.com) 的 Claude Code
-- [Cursor](https://cursor.sh) AI 驱动的编辑器
 - AI Agent 研究社区
 - 所有贡献者和用户
 
