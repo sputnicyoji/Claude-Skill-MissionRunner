@@ -7,7 +7,6 @@
 [![GitHub stars](https://img.shields.io/github/stars/sputnicyoji/Claude-Skill-MissionRunner?style=social)](https://github.com/sputnicyoji/Claude-Skill-MissionRunner)
 
 
-**English** | [简体中文](README_zh-CN.md) | [日本語](README_ja.md)
 
 Mission Runner is an AI coding assistant skill that enables autonomous execution of complex, multi-file development tasks. It combines task planning, iterative execution, and self-reflection to deliver high-quality results.
 
@@ -23,7 +22,7 @@ Mission Runner is an AI coding assistant skill that enables autonomous execution
 | **Advisory State Machine** | Guided workflow with escape hatch for flexibility |
 | **Compliance Check (Step 3.6)** | Build-pass diff-vs-plan verifier; catches "code runs but does the wrong thing" goal drift |
 | **Pre-Promise Audit (5-item gate)** | Hard gate before `<promise>` with 3 external signals (git diff, build output, lesson file) the LLM cannot fabricate |
-| **Phase 5 Distill + cross-mission archive** | Every mission writes 1-3 ≤150-char lessons to `~/.claude/mission-archive/{slug}/lessons/`; future missions glob them in Phase 0 as Prior Lessons |
+| **Phase 5 Distill + cross-mission archive** | Every mission writes 1-3 ≤150-word-char lessons to `~/.claude/mission-archive/{slug}/lessons/`; future missions glob them in Phase 0 as Prior Lessons |
 
 ## When to Use
 
@@ -75,9 +74,10 @@ Add user authentication feature to the application
 
 ## Iteration Rules
 1. Read-Before-Decide: Read _planning/mission_plan.md
-2. Execute: Execute next [ ] task, mark [x]
+2. Execute: Execute next [ ] task. **Do NOT mark [x] yet** (Rule 0 — [x] is reserved for Step 3.6 verdict=pass)
 3. Validate: Build/lint/test check
-4. Checkpoint: Update Progress Log
+4. Step 3.6 Compliance Check: diff vs plan; only on `pass` is [x] applied
+5. Checkpoint: Update Progress Log
 
 ## Completion Criteria
 <promise>Mission Accomplished</promise>
@@ -95,7 +95,7 @@ _planning/                                   # Per-mission (transient)
 ~/.claude/mission-archive/                   # Cross-mission (persistent)
 └── {project-slug}/
     └── lessons/
-        └── {YYYY-MM-DD}-{topic-kebab}.md   # ≤150-char reusable insights
+        └── {YYYY-MM-DD}-{topic-kebab}.md   # ≤150-word reusable insights
 ```
 
 ## Core Workflow
@@ -126,7 +126,7 @@ Each Iteration:
        └── Yes (all done) -> Phase 4 Debrief -> Phase 5 Distill -> 5-item Audit
 
 Phase 4: Debrief        (confirm Success Criteria all [x])
-Phase 5: Distill        (NEW: extract 1-3 ≤150-char lessons to archive)
+Phase 5: Distill        (NEW: extract 1-3 ≤150-word lessons to archive)
 Pre-Promise Audit       (NEW: 5-item gate with 3 external signals)
 ├── all 5 pass -> <promise>Mission Accomplished</promise>
 └── any fail   -> Partial Report + append to ## Audit Trail
@@ -164,13 +164,25 @@ Error classification:
 ## State Machine (Advisory Mode)
 
 ```
-init -> read_before_decide -> confidence_check -> execute -> validate -> checkpoint
-                                    |                           |
-                                    v (low)                     v (fail)
-                                ask_user              self_reflection
+init -> read_before_decide -> confidence_check -> execute -> validate
+                                    |                           | (pass)
+                                    v (low)                     v
+                                ask_user                  compliance_check
+                                                                | (pass)
+                                                                v
+                                                          checkpoint_mark ([x] HERE, not earlier)
+                                                                |
+                                                                v
+                                                          checkpoint -> read_before_decide (next iter)
+                                                                       OR -> debrief -> distill -> audit -> done
+
+  validate (fail) ---------------> self_reflection -> execute (simple, retry <=2)
+  compliance_check (escalate) ---> self_reflection -> checkpoint (medium, next iter)
+                                                   -> ask_user (complex)
+  compliance_check (needs_revision) -> read_before_decide (no [x], same task next iter)
 ```
 
-The state machine is **advisory, not mandatory**. Agent may deviate when needed - just record the reason.
+The state machine is **advisory, not mandatory**. Agent may deviate when needed - just record the reason in `mission_notes.md > Deviations & Reasons`. The critical state — `checkpoint_mark` — is the only place `[x]` can be applied (Rule 0 / Mandate 5). See `references/state-machine.md` for full state-graph detail.
 
 ## Theoretical Foundations
 
@@ -187,15 +199,22 @@ Mission Runner incorporates cutting-edge concepts from AI agent research:
 
 ```
 Claude-Skill-MissionRunner/
-├── SKILL.md                          # Claude Code skill (main)
+├── SKILL.md                          # Claude Code skill core spine (~300 lines)
 ├── references/
-│   └── prompt-template.md            # Detailed prompt templates
+│   ├── prompt-template.md            # Standalone-agent full prompt (used by /ralph-loop)
+│   ├── state-machine.md              # Full state graph + workflow_state.json schema + anti-hallucination design
+│   ├── self-reflection.md            # Reflexion-paper long-form protocol (Step 3.5)
+│   ├── confidence-check.md           # 4-dimension scoring (Step 1.5 structured form)
+│   ├── file-templates.md             # mission_plan.md / mission_notes.md / lesson schemas
+│   └── status-output.md              # Verbose iteration-boundary ASCII templates (optional)
 ├── examples/
-│   └── _planning/                    # Example planning files
+│   └── _planning/                    # Live example mission files
 ├── README.md
 ├── LICENSE
 └── CHANGELOG.md
 ```
+
+SKILL.md is the always-loaded core. The `references/` files are loaded only when SKILL.md instructs Claude to read them (progressive disclosure pattern — keeps the per-trigger context cost low).
 
 ## Contributing
 

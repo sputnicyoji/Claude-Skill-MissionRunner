@@ -8,7 +8,7 @@
 1. Filesystem as Memory   - Use _planning/ directory for persistent state
 2. Read-Before-Decide     - Read mission_plan.md before each iteration
 3. Failures are Data      - Record errors to mission_notes.md for learning
-4. One Task at a Time     - Execute one task per iteration, mark immediately
+4. One Task at a Time     - Execute one task per iteration; mark [x] ONLY after Step 3.6 verdict=pass (Rule 0 / Mandate 5)
 5. Uncertainty is Signal  - Ask when unsure, never guess
 6. Reflect-Before-Retry   - Reflect before retrying after failure (Reflexion)
 7. Parallel-When-Possible - Research/Review can parallel, Implementation serial
@@ -594,21 +594,32 @@ Design philosophy: State machine = Navigation map, not rails
 - Records actual path for audit and learning
 - Abnormal situations can trigger "escape hatch" to free-form mode
 
-State machine core states (recommended path):
-init -> read_before_decide -> confidence_check -> execute -> validate -> checkpoint
-                                    | (fail)
-                             self_reflection
+State machine core states (recommended path, v1.1+):
+init -> read_before_decide -> confidence_check -> execute -> validate
+                                                              | (pass)
+                                                              v
+                                                       compliance_check
+                                                              | (pass)
+                                                              v
+                                                       checkpoint_mark ([x] applied here)
+                                                              | (fail at validate or compliance escalate)
+                                                              v
+                                                       self_reflection
 
 State transition rules (advisory):
 - confidence_check:
   - high (>=4): -> execute
-  - medium (3-4): -> execute (with recording)
+  - medium (3 <= avg < 4): -> execute (with recording)
   - low (<3): -> ask_user
 - validate:
-  - pass: -> checkpoint
+  - pass: -> compliance_check
   - fail: -> self_reflection
+- compliance_check (Step 3.6 — new in v1.1):
+  - pass: -> checkpoint_mark (NOW [x] is applied; never before)
+  - needs_revision: -> read_before_decide (no [x], next iteration continues same task)
+  - escalate: -> self_reflection
 - self_reflection:
-  - simple_error: -> execute (retry)
+  - simple_error: -> execute (retry, max 2)
   - medium_error: -> checkpoint (next iteration)
   - complex_error: -> ask_user
 - checkpoint:
@@ -626,8 +637,9 @@ When deviating from state machine:
 2. Continue execution, keep mission_plan.md as goal reference
 3. After task completion, record "free-form mode" path for future learning
 
-State persistence (optional). The canonical schema is defined in SKILL.md
-"## 工作流状态机 > 状态持久化" (v2.2). Mirror its fields verbatim:
+State persistence (optional). The canonical schema is defined in
+references/state-machine.md "workflow_state.json schema (v2.2 canonical)".
+Mirror its fields verbatim:
 // _planning/workflow_state.json
 {
   "current_state": "execute",

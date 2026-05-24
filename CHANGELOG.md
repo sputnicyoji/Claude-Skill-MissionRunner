@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (2026-05-24 — post v2-spine code review)
+
+A 5-angle code review on the v2 spine rewrite surfaced 15 confirmed issues. All fixed in this pass:
+
+**P0 — Rule 0 violations (silent regression to v1.0 self-report)**
+- `README.md:78` ("Execute next [ ] task, mark [x]") and `references/prompt-template.md:11` ("mark immediately") both instructed marking [x] at Step 2 Execute — directly contradicting Rule 0. Both rewritten to require Step 3.6 verdict=pass before [x].
+- `README_zh-CN.md` and `README_ja.md` had the same violation. Per user direction, **the zh-CN and ja README variants were deleted** — they had drifted from the English canonical version (state-machine diagrams missing compliance_check, Repository Structure missing references/, v1.0 Iteration Rules) and a 3-way sync was not maintainable. The English README is now the single source.
+- The consolidated **Four Prohibitions / Five Mandates** tables were dispersed into prose during the v2 spine rewrite, leaving downstream docs (`prompt-template.md` still naming "Mandate 5", Escape Hatch cross-references) with no anchor to resolve to. Added an **"At-a-glance: the four prohibitions + five mandates"** digest section to SKILL.md immediately after Rule 0 — recovers the named anchors without re-bloating the body.
+
+**P1 — Cross-file inconsistency**
+- `references/prompt-template.md:629` pointed `workflow_state.json` schema readers at the Chinese section `## 工作流状态机 > 状态持久化` that the v2 rewrite deleted. Redirected to `references/state-machine.md "workflow_state.json schema (v2.2 canonical)"`.
+- `references/prompt-template.md` §8 State Machine Best Practices diagram and `README.md` State Machine diagram both showed the v1.0 path `validate -> checkpoint`, missing the v1.1 `compliance_check` state. Both diagrams updated to show `validate(pass) -> compliance_check -> checkpoint_mark` with `[x]` annotated as applied only at `checkpoint_mark`.
+- `README.md` Repository Structure listed only `prompt-template.md` under `references/`; updated to list all 6 (added `state-machine.md`, `self-reflection.md`, `confidence-check.md`, `file-templates.md`, `status-output.md`).
+- SKILL.md Rule 0 section now carries an explicit cross-mapping note: "legacy docs and `references/prompt-template.md` call this **Mandate 5** / **[x] timing**. Same rule." — so the two vocabularies don't silently disagree.
+
+**P1 — Behavior loss in v2 rewrite**
+- **Phase 0 lesson-glob matching algorithm was missing** from all new files (the v1 SKILL.md had a concrete spec: parse frontmatter, ≥1 keyword OR description-substring match case-insensitive, cap at 5 hits). Added a full "Phase 0 — Initialization (one-shot, at mission start)" section to SKILL.md with: slug derivation (Bash + PowerShell), `mkdir -p _planning` cross-shell branches, the lesson-glob match algorithm with explicit threshold + cap, mission_plan.md / mission_notes.md write steps.
+- **Pre-Promise Audit probes (item 1 grep, item 4 `verified: pass` grep) were Bash-only**, contradicting item 5 which already had both shells. All probes now carry explicit Bash + PowerShell forms, with a `Do NOT mix shells` warning. Same fix applied to §4 mid-iteration micro-audit item 2 (`grep -n` → added `Select-String` form) and §6 Phase 5 step 1 slug derivation (no longer just `basename $(pwd)`).
+- **Step 3.6 Compliance Check** in the SKILL.md compact form jumped straight to Q1/Q2 without `git diff HEAD` retrieval, letting Q1/Q2 be answered from LLM memory — exactly the failure mode Step 3.6 exists to prevent. Restored the "(a) Collect 3 signals first: task description re-read + `git diff HEAD` + most recent Decisions Made entry; (b) Then ask 2 questions" structure from `prompt-template.md`.
+
+**P1 — Schema gaps**
+- `references/file-templates.md` Distilled Lessons template said `Source: Iter N (Decisions Made / Self-Reflections / Compliance Checks)` with no filter — but SKILL.md §6 step 3 requires "Compliance Checks where verdict = escalate only" (`needs-revision` verdicts self-resolve and shouldn't generate lessons). Added the filter to the template + a comment explaining the rationale.
+- `references/file-templates.md` mission_plan.md template had no sub-task nesting example, leaving SKILL.md §3.6 `needs-revision` ("Append a sub-task under this task") with no schema. Added a 2-space-indent example. Also updated SKILL.md Pre-Promise Audit item 1 probe from `^- \[ \]` to `^\s*- \[ \]` so indented sub-tasks are caught (without this, a sub-task left open would silently pass audit item 1).
+
+**P2 — Detail bugs**
+- README.md "≤150-char" / "≤150-char reusable insights" (3 places) → "≤150-word" to match SKILL.md §6 step 4 and file-templates.md "Why the strict 150-word cap".
+- `references/confidence-check.md` Medium band `(avg 3-4)` and High band `(avg >= 4)` overlapped at exactly 4.0. Bands made half-open: `Medium (3 <= avg < 4)` / `High (avg >= 4)`. Also added the **single-dimension override** rule (one dimension at 1-2 forces stop even when average is green) explicitly to confidence-check.md, with a note that the SKILL.md compact form does NOT capture this override.
+- `references/state-machine.md` ASCII path diagram placed the `(simple_error / medium_error / complex_error)` annotation between `checkpoint_mark` and `checkpoint`, visually suggesting these transitions exited `checkpoint_mark`. They actually exit `self_reflection`. Diagram re-drawn with annotations on the correct source state.
+- CHANGELOG fake link `[user-supplied post-mortem](https://github.com/sputnicyoji/mission-runner)` (pointed to repo root, not any post-mortem document) replaced with honest attribution to direct usage observation.
+
+### Removed (2026-05-24 — non-English README variants)
+
+`README_zh-CN.md` and `README_ja.md` were deleted. They had drifted significantly from `README.md` (v1.0 Iteration Rules, missing `compliance_check` in state-machine diagrams, missing 5 reference files in Repository Structure) and a 3-way sync was not being maintained. SKILL.md and references/* contain the canonical content for all consumers; CLI users go through README.md (English).
+
+Also removed the language-switcher line `**English** | [简体中文](README_zh-CN.md) | [日本語](README_ja.md)` from README.md line 10. Note: the CHANGELOG and `docs/plans/2026-05-23-self-improvement.md` retain historical mentions of these files — those are records of past state and were not retroactively edited.
+
+### Changed (2026-05-24 — v2 spine rewrite)
+
+**SKILL.md compressed 1172 -> 300 lines (-74%); state-machine / Reflexion / 4-dim confidence detail moved to `references/`.**
+
+Rationale: real-world use in Prism-OS (Runtime DAG Refactor mission, 5+ iterations) showed that ~70 % of the always-loaded SKILL.md body was being skipped at execution time. The state-machine YAML + ASCII graph + JSON schema (~250 lines) was documented as "advisory mode" and almost never maintained in practice. The 4-dimension confidence scoring table was being abbreviated to a one-line "Confidence: high/medium/low + why" by every iteration. The iteration-boundary ASCII templates were being replaced with a sentence or two. Long Reflexion records were overkill for simple typo / unused-var fixes.
+
+The five concrete changes (based on direct usage observation in a multi-iteration Prism-OS refactor mission, not from any prior published post-mortem):
+
+1. **Rule 0 promoted to the first section.** "A task is `[x]` only when (build pass) AND (Step 3.6 verdict=pass)" was previously buried in `Mandate 2 of five`. It is now the very first prose after the title, before activation conditions or philosophy — because it is the single rule that, if dropped, collapses the whole anti-hallucination design into ordinary self-report.
+2. **Mid-iteration 3-item micro-audit added** (`SKILL.md` §4). The 5-item Pre-Promise Audit was the only place external signals were required, but it only fires at final promise time. Most LLM hallucination of completeness happens *between* tasks. The new 3-item micro-audit (build output exists in transcript / Compliance Check entry exists in notes / `[x]` actually applied) makes per-iteration transitions as honest as the final promise.
+3. **Confidence Check simplified** to High / Medium / Low + one-line reason (compact form in SKILL.md). The 4-dimension structured form moved to `references/confidence-check.md`, reframed as the right tool for the narrow case where Low confidence needs a surgical AskUserQuestion to the user.
+4. **State machine relocated** to `references/state-machine.md`. SKILL.md now has a 7-step compact loop + a 1-paragraph Escape Hatch summary that links to the deep doc. The advisory-mode philosophy + full state graph + JSON schema all live in the reference for the rare reader who needs them.
+5. **Reflexion long-form moved** to `references/self-reflection.md`. SKILL.md keeps a 1-paragraph classifier (Simple / Medium / Complex-or-repeated) with a 4-row table; readers needing the full multi-paragraph reflection template and 3-item memory cap follow the link.
+
+Background docs:
+- `references/file-templates.md` — `mission_plan.md` + `mission_notes.md` + lesson schema in one place. SKILL.md links here instead of inlining 80 lines of templates.
+- `references/status-output.md` — the verbose iteration-boundary ASCII templates, now flagged as optional for "high-visibility unattended runs".
+
+What was NOT changed:
+- `references/prompt-template.md` (the standalone-agent Standard Template) — already canonical, no rewrite needed.
+- `examples/_planning/` — live samples remain authoritative.
+- `Mandate 2` / `Mandate 4` / `Mandate 5` semantics — all preserved verbatim under Rule 0 + §5 Pre-Promise Audit + §6 Phase 5. No protocol-level behavior change.
+- README files — already up-to-date with v1.1 protocol; not touched.
+
+Backup: the original 1172-line SKILL.md is preserved at `SKILL.md.pre-v2-spine.bak` for reference / rollback. Delete after confirming v2 works.
+
 ### Removed (2026-05-24)
 
 **Cursor support dropped**
