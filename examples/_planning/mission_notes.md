@@ -57,3 +57,9 @@
 ## Audit Trail
 [Will be populated when Mission Accomplished is attempted - records any audit failures.]
 - (No promise attempts yet.)
+
+## Deviations & Reasons
+[Will be populated if Escape Hatch fires (mode -> free_form) or the agent
+ deviates from the recommended state path. Hard constraints (5-item audit,
+ Mandate 5 [x] timing, Phase 5 Distill) still apply in free_form mode.]
+- (No deviations recorded; mode is still "advisory".)

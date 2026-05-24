@@ -53,7 +53,11 @@
      * Hit threshold: task contains >=1 keyword OR description token
    - Cache up to 5 hits with full lesson body
 
-4. Create planning directory: mkdir -p _planning
+4. Create planning directory (pick the form matching your shell tool;
+   do NOT mix — `mkdir -p` errors on PowerShell with
+   "A positional parameter cannot be found"):
+   - Unix-like (Bash / zsh): `mkdir -p _planning`
+   - Windows PowerShell:     `New-Item -ItemType Directory -Force -Path _planning`
 
 5. Create _planning/mission_plan.md:
    - Objective: Extract from task description
@@ -70,9 +74,10 @@
    - Open Questions, Distilled Lessons, Audit Trail
 
 Optional:
-- Create _planning/workflow_state.json:
-   { "current_state": "init", "iteration": 0, "phase": "initialization" }
-- Create _planning/agent_outputs/ directory: mkdir -p _planning/agent_outputs
+- Create _planning/workflow_state.json with the v2.2 canonical schema (see
+  "State persistence" later in this file). Init shape:
+   { "current_state": "init", "iteration": 0, "phase": "initialization",
+     "mode": "advisory", "task_marked_done": false, "compliance_verdict": null }
 
 ---------------------------------------------------------------
                     Iteration Rules (Must Execute Each Iteration)
@@ -468,6 +473,17 @@ Implement order reward distribution feature, involving Order + Reward modules
 - [Iter N, Attempt M] Audit failed at item 3 (git diff empty)
   -> Suggested action: re-verify Iteration N actually wrote files, not just "claimed completion"
 - [Iter N+1, Attempt 1] All 5 items passed -> promise issued
+
+## Deviations & Reasons
+[Escape Hatch / state-machine deviation log — used when mode switches to free_form
+ or the agent temporarily bypasses the recommended state path.]
+[Empty unless escape hatch fired.]
+- [Iter N] Trigger: {agent_confidence<0.3 / iteration>max / user:free_form / path_conflict}
+  Original current_state: {state}
+  New mode: free_form
+  Reason: {why deviate}
+  Hard constraints still binding: 5-item Pre-Promise Audit, Mandate 5 ([x] timing),
+                                  Phase 5 Distill
 ```
 
 ---
@@ -604,7 +620,8 @@ When deviating from state machine:
 2. Continue execution, keep mission_plan.md as goal reference
 3. After task completion, record "free-form mode" path for future learning
 
-State persistence (optional):
+State persistence (optional). The canonical schema is defined in SKILL.md
+"## 工作流状态机 > 状态持久化" (v2.2). Mirror its fields verbatim:
 // _planning/workflow_state.json
 {
   "current_state": "execute",
@@ -612,7 +629,11 @@ State persistence (optional):
   "retry_count": 0,
   "phase": "implementation",
   "task_index": 3,
-  "mode": "advisory"  // "advisory" | "free_form"
+  "task_marked_done": false,
+  "compliance_verdict": null,
+  "mode": "advisory",       // "advisory" | "free_form"
+  "confidence_scores": { "understanding": 5, "certainty": 4, "dependencies": 4, "risk": 4 },
+  "timestamp": "2026-05-23T15:30:00Z"
 }
 
 Interrupt recovery:

@@ -354,6 +354,25 @@ Phase 2: Implementation [1/3 done]
 ### Decisions Made
 - [Iter N] 决定使用 zzz 方案，因为...
 
+### Self-Reflections (本轮 Step 3.5 产出)
+- [Iter N, Attempt 1] {错误信息}
+  反思: {根本原因 + 改进方案}
+  策略: {立即修复 / 记录待处理 / 询问用户}
+
+### Compliance Checks (本轮 Step 3.6 verdict)
+- [Iter N] Task: "{任务名}"
+  Verdict: {pass / needs-revision / escalate}
+
+### Distilled Lessons (仅 Phase 5 完成时填)
+- {YYYY-MM-DD}-{topic-kebab}.md
+  "一句话摘要"
+
+### Audit Trail (仅 promise 尝试时填)
+- [Iter N, Attempt M] Audit item X failed (原因) / All 5 passed
+
+### Deviations & Reasons (仅 escape hatch 触发时填)
+- [Iter N] Trigger: ... → mode=free_form, 硬约束仍生效
+
 --------------------------------------------------------------------
 ```
 
@@ -514,7 +533,9 @@ ask_user (complex_error from self_reflection) ─→ (等待用户)
 ### 状态持久化
 
 ```json
-// _planning/workflow_state.json (v2.1, 含 Step 3.6 / Phase 5 / audit 状态)
+// _planning/workflow_state.json (v2.2 canonical, 含 Step 3.6 / Phase 5 / audit / escape-hatch 状态)
+// 本 schema 是单一权威; references/prompt-template.md 与 examples/_planning/workflow_state.json
+// 必须与本结构对齐 (字段同名、缺省值同语义).
 {
   "current_state": "compliance_check",
   "iteration": 2,
@@ -523,6 +544,7 @@ ask_user (complex_error from self_reflection) ─→ (等待用户)
   "task_index": 3,
   "task_marked_done": false,
   "compliance_verdict": null,
+  "mode": "advisory",
   "confidence_scores": {
     "understanding": 5,
     "certainty": 4,
@@ -532,6 +554,18 @@ ask_user (complex_error from self_reflection) ─→ (等待用户)
   "timestamp": "2026-05-23T15:30:00Z"
 }
 ```
+
+字段说明:
+- `current_state`: 见下方枚举.
+- `iteration`: 当前迭代号 (Phase 0 init 为 0; 第一次进 Step 1 起递增).
+- `retry_count`: 本迭代 Step 3.5 Self-Reflection 立即修复重试计数 (上限 2).
+- `phase`: `initialization` / `research` / `implementation` / `verification` / `debrief` / `distill`.
+- `task_index`: 当前 Phase 内的任务序号 (0-based).
+- `task_marked_done`: 当前任务的 [x] 是否已勾 — 只有 Step 3.6 verdict=pass 后才可置 true.
+- `compliance_verdict`: 最近一次 Step 3.6 结果 — `null` / `"pass"` / `"needs-revision"` / `"escalate"`.
+- `mode`: `"advisory"` (默认) / `"free_form"` (escape hatch 触发后置位; 此时状态机暂停, 但协议层硬约束仍生效 — 见 Escape Hatch 段).
+- `confidence_scores`: Step 1.5 当前任务的 4 维度评分.
+- `timestamp`: ISO 8601, 每次状态转换时更新.
 
 合法 `current_state` 值: init / read_before_decide / confidence_check / ask_user / execute / validate / compliance_check / self_reflection / checkpoint_mark / checkpoint / debrief / distill / audit / done / report
 
@@ -573,9 +607,28 @@ escape_hatch:
 ```
 
 **触发逃逸舱后：**
-1. Agent 恢复完全自主权，不再受状态机约束
-2. 仍保留 mission_plan.md 作为目标参考（但非强制）
-3. 任务完成后，记录"自由模式"路径供后续学习
+1. 状态机暂停 — `mode` 切换到 `free_form`，`current_state` 不再更新；
+   Agent 自主选择执行步骤、可跳过 Step 1.5 / Step 3.5 的具体模板
+2. mission_plan.md 仍是目标参考（用于回答"我在做什么"）
+3. 退出 free_form 时，向 mission_notes.md 的 `## Deviations & Reasons` 段
+   追加一条记录（含触发原因、原状态、偏离结果）
+
+**escape hatch 不豁免的硬约束（CRITICAL）：**
+
+下列三项即使在 free_form 下也必须遵守 — 它们属于协议层硬约束，**不是**状态机里的"建议路径"：
+
+| 硬约束 | 出处 | 为什么不能 bypass |
+|--------|------|-------------------|
+| **强制 5: [x] timing**       | 见 "五大强制" | `[x]` 是"build pass + Compliance pass"的复合外部信号；free_form 下若直接勾 [x]，等于让 LLM 重新拿回伪造完成度的权力，整个 v1.1 反 hallucination 设计崩溃 |
+| **Phase 5 Distill**          | 见 "Phase 5" 段 | 跨 mission 学习层的生产端；跳过 = 后续 mission 拿不到 Prior Lessons |
+| **5 项 Pre-Promise Audit**   | 见 "Pre-Promise Audit Checklist" | 含 3 个外部信号（git diff / build output / lesson 文件存在），Audit 项 5 又依赖 Phase 5 — 三者锁在一起，任一缺失则 promise 必拒 |
+
+简言之：**escape hatch 让状态机沉默，不让 audit 沉默**。LLM 想发 `<promise>Mission Accomplished</promise>`，仍然必须先跑完 Phase 4 → Phase 5 → 5 项 Audit；任一外部信号缺失就只能输出 Partial Report。
+
+如果 escape hatch 触发后 Agent 判断"任务确实无法完成"（如需求被推翻、依赖被废弃）— 正确做法是**主动退出而非发 promise**：
+1. 在 mission_notes.md 的 `## Deviations & Reasons` 段说明退出原因
+2. 在 `## Audit Trail` 段写一条 "abandoned (reason: ...)" 而不是 promise
+3. 把 mission_plan.md 未勾任务保留为 `[ ]`，供后续 mission 接手
 
 ---
 
@@ -720,6 +773,15 @@ keywords: [关键词1, 关键词2, ...]
 - [Iter N, Attempt M] Audit failed at item X (原因)
   -> Suggested action: ...
 - [Iter N+1, Attempt 1] All 5 items passed -> promise issued
+
+## Deviations & Reasons
+[Escape Hatch / 状态机偏离记录 — mode 切换到 free_form 或临时绕过推荐路径时填]
+[未触发时此段为空; 触发时按以下格式追加]
+- [Iter N] 触发: {agent_confidence<0.3 / iteration>max / user:free_form / path_conflict}
+  原 current_state: {state}
+  新 mode: free_form
+  理由: {为什么偏离}
+  仍需遵守的硬约束: 5 项 Pre-Promise Audit / 强制 5 ([x] timing) / Phase 5 Distill
 ```
 
 ---
@@ -963,29 +1025,42 @@ Phase 5: Distill (收尾蒸馏 - Mission Accomplished 的硬前置)
 /mission-runner "为电商系统添加订单退款功能"
 ```
 
-### 方式二：手动调用
+### 方式二：手动调用 (复制完整 Standard Template)
+
+**不要直接抄下面的精简骨架** —— 它只列出顶层结构, 用于解释 prompt 长什么样。
+真正贴进 ralph-loop / agent 上下文的 prompt 必须使用
+[`references/prompt-template.md`](references/prompt-template.md) 的 Standard Template
+(含 7 步 Phase 0 + 含 Step 1.5 / 3.5 / 3.6 的迭代规则 + 5 项 Pre-Promise Audit)。
+
+骨架 (仅示意, 不要照抄):
 
 ```
 [MISSION RUNNER - PIR MODE]
 
 ## 任务
-为电商系统添加订单退款功能
+{任务描述}
 
-## Phase 0: Initialization
-1. mkdir -p _planning
-2. 创建 mission_plan.md 和 mission_notes.md
-3. 分解任务到 Phases
+## Phase 0: Initialization (展开见 prompt-template Standard Template)
+- 7 步: 任务解析 / slug 推导 / 历史 lesson glob / 创建 _planning /
+  创建 mission_plan.md (含 Prior Lessons 段) / 创建 mission_notes.md /
+  启动迭代
 
-## 迭代规则 (每次迭代必须执行)
-1. Read-Before-Decide: 读取 _planning/mission_plan.md
-2. Execute: 执行下一个 [ ] 任务，更新 [x]
-3. Validate: 验证检查，错误追加到 mission_notes.md
-4. Checkpoint: 更新 Progress Log
+## Iteration Rules (展开见 prompt-template Standard Template)
+- Step 1   Read-Before-Decide (含 Prior Lessons / Compliance Checks / Audit Trail)
+- Step 1.5 Confidence Check (4 维度)
+- Step 2   Execute (一次一个任务; **不立即勾 [x]**)
+- Step 3   Validate (build / lint / test)
+- Step 3.5 Self-Reflection (validate 失败 或 Step 3.6 escalate)
+- Step 3.6 Compliance Check (diff vs plan; pass 后才勾 [x])
+- Step 4   Checkpoint (全完成 → Phase 4 Debrief → Phase 5 Distill → 5 项 audit)
 
-## 完成条件
-所有 Success Criteria 标记 [x] 且验证通过后输出:
-<promise>Mission Accomplished</promise>
+## Completion (展开见 prompt-template Standard Template)
+- 5 项 Pre-Promise Audit 全过 -> <promise>Mission Accomplished</promise>
+- 任一项失败 -> Partial Report, 追加 Audit Trail
 ```
+
+强烈不建议自行精简协议。Step 1.5 / 3.5 / 3.6 + 5 项 audit 中任一缺失,
+都会让任务退化回 v1.0 的 "声明完成" 模式 (LLM 自报 [x] 但 git diff 是空).
 
 ---
 

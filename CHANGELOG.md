@@ -21,6 +21,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SKILL.md `Task(subagent_type=...)` shown as Python code.** The Tool Selection Strategy section rendered subagent invocations as Python function calls — a representation that risks the agent serialising them as text strings rather than issuing actual `Task` tool calls. Rewritten as a neutral field-mapping description ("call Task tool, set `subagent_type` to ...") with an explicit warning not to emit the lines as string output.
 - **`examples/_planning/workflow_state.json` timestamp 2024-01-15 contradicted `mission_plan.md` (2026-05-15 lesson reference, Iter 4 in progress).** Bumped to `2026-05-15T15:30:00Z` so the three example files share one timeline.
 
+### Fixed (2026-05-24 — post-review part 2)
+
+Follow-up sweep after a second pass through the skill surface uncovered seven
+more cross-file inconsistencies and protocol omissions:
+
+**P0 — user-copying-paste hazards**
+- **`references/prompt-template.md:56` `mkdir -p _planning` (Standard Template Phase 0 step 4) was Bash-only.** More severe than the SKILL.md occurrence fixed above, because this template is what users paste into `/ralph-loop:ralph-loop "..."` — the first command of every mission would error on PowerShell. Now carries Bash + PowerShell branches with explicit "do not mix" guidance.
+- **SKILL.md `## 使用方式 > ### 方式二：手动调用` was a v1.0 leftover.** The pasted prompt skeleton lacked Step 1.5 / 3.5 / 3.6, told the agent to `mkdir -p _planning` (Bash-only), and instructed "Execute: 执行下一个 [ ] 任务，更新 [x]" — a direct violation of Mandate 5 (which restricts `[x]` to Step 3.6 verdict=pass after the v1.1 hardening). Replaced with a non-copyable v1.1 outline that explicitly points users to `references/prompt-template.md` Standard Template, with a warning that self-truncating the protocol drops the mission back into v1.0 "I claim done" mode.
+
+**P1 — cross-file schema / orphan references**
+- **`workflow_state.json` schema was defined three different ways.** SKILL.md L519 (v2.1 canonical) had `task_marked_done` / `compliance_verdict` / `confidence_scores` but no `mode`; `references/prompt-template.md` L610 had `mode` but none of the v1.1 fields; `examples/_planning/workflow_state.json` was a third partial overlap. Promoted SKILL.md to v2.2 canonical (adds `mode` as a first-class field, documents every field with semantics including the escape-hatch `"free_form"` value), then synced prompt-template and examples to the same shape. CHANGELOG L107 had claimed the schema was already updated; in reality only SKILL.md was touched.
+- **`_planning/agent_outputs/` was an orphan reference** (prompt-template.md:75). The directory was never explained in SKILL.md, never written into, never read from. Deleted the line; replaced the surrounding "Optional" block with the canonical v2.2 init shape for `workflow_state.json`.
+- **`## Deviations & Reasons` was referenced but never defined.** SKILL.md escape-hatch (L572) and prompt-template.md (L603) both say "append to mission_notes.md → `## Deviations & Reasons`", but the mission_notes.md template in SKILL.md, prompt-template.md, and examples all lacked that section header — an agent triggering the escape hatch would have nowhere to write. Added the section header (with format examples) to all three.
+
+**P2 — protocol gaps**
+- **Escape hatch said "agent recovers full autonomy" without scoping it.** SKILL.md L575-578 risked giving the LLM a "free_form = bypass everything" excuse — which would silently void the 5-item Pre-Promise Audit, the Phase 5 Distill prerequisite, and Mandate 5 ([x] timing). Added a CRITICAL subsection listing the three hard constraints that remain binding in `free_form` mode (with rationale: they are protocol-layer, not state-machine, so the state machine going quiet does not silence them), plus an explicit "abandon mission" exit path when completion truly isn't possible (write to `## Audit Trail` rather than issuing a fabricated promise).
+- **The "迭代状态输出 (MUST)" template only listed v1.0 sections.** SKILL.md L344-356's "Notes Changes (本轮新增)" subtemplate enumerated Failures & Learnings / Research Findings / Decisions Made — none of the v1.1 sections (Compliance Checks, Self-Reflections, Distilled Lessons, Audit Trail, Deviations & Reasons). Added subsections for each so per-iteration visibility output actually surfaces v1.1 evidence.
+
 ### Added
 
 **Cross-mission learning layer (Task 3B — Phase 0 historical lesson glob, consumer side)**
