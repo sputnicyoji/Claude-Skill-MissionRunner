@@ -1,243 +1,108 @@
 # Mission Runner
 
-> **Automated Multi-File Development with PIR (Plan-Iterate-Resolve) Methodology**
+A standalone, mechanically verified full-loop task orchestrator for AI coding agents across Claude Code, Codex CLI, and Antigravity / Gemini CLI.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-Compatible-blueviolet)](https://claude.ai/code)
-[![GitHub stars](https://img.shields.io/github/stars/sputnicyoji/Claude-Skill-MissionRunner?style=social)](https://github.com/sputnicyoji/Claude-Skill-MissionRunner)
+Mission Runner v3 replaces prompt-heavy state machines and self-graded compliance checklists with a concise positive-framed spine ([SKILL.md](SKILL.md)) backed by a zero-dependency Python 3.9+ stdlib control plane ([scripts/mission_ctl.py](scripts/mission_ctl.py)).
 
+## Why v3
 
-
-Mission Runner is an AI coding assistant skill that enables autonomous execution of complex, multi-file development tasks. It combines task planning, iterative execution, and self-reflection to deliver high-quality results.
-
-## Key Features
-
-| Feature | Description |
-|---------|-------------|
-| **Filesystem as Memory** | Persistent state using local `_planning/` files, not context window |
-| **Read-Before-Decide** | Always re-read the plan before each decision to prevent goal drift |
-| **Failures as Data** | All errors recorded for learning in subsequent iterations |
-| **Confidence Check** | 4-dimension assessment before each task execution |
-| **Self-Reflection (Reflexion)** | Semantic gradient learning from failures (NeurIPS 2023) |
-| **Advisory State Machine** | Guided workflow with escape hatch for flexibility |
-| **Compliance Check (Step 3.6)** | Build-pass diff-vs-plan verifier; catches "code runs but does the wrong thing" goal drift |
-| **Pre-Promise Audit (5-item gate)** | Hard gate before `<promise>` with 3 external signals (git diff, build output, lesson file) the LLM cannot fabricate |
-| **Phase 5 Distill + cross-mission archive** | Every mission writes 1-3 ≤150-word-char lessons to `~/.claude/mission-archive/{slug}/lessons/`; future missions glob them in Phase 0 as Prior Lessons |
-
-## When to Use
-
-| Scenario | Example |
-|----------|---------|
-| New module development | Create complete feature with Data/Service/UI layers |
-| Multi-file implementation | Add feature requiring 3+ files |
-| Cross-module features | Implement functionality spanning multiple systems |
-| Large refactoring | Rename/reorganize module structure |
-
-## When NOT to Use
-
-- Single file edits
-- Simple bug fixes
-- Research/Q&A tasks
-- Configuration changes
+- **Mechanical Verification Gates Instead of Self-Grading**: `mission_ctl.py task-done` runs real commands, logs full output, verifies a non-empty `git write-tree` diff, and flips `- [x]` checkboxes only on verified success.
+- **Zero-Interference Git Snapshots**: Uses a temporary `GIT_INDEX_FILE` + `git write-tree` so clean, dirty, staged, worktree, and unborn-HEAD repositories can be tracked without touching `.git/index` or polluting `.gitignore` (excludes `_planning/` via `.git/info/exclude`).
+- **Adaptive Topology (`inline` vs `subagent` vs `worktree`)**: Executes 1-3 tightly coupled tasks directly inline without over-delegation, and fans out 4+ cross-file tasks to fresh per-task Implementer subagents while keeping the controller lean.
+- **Fresh Read-Only Review**: Replaces same-context grading with cumulative `mission_ctl.py diff` inspection by one fresh read-only Reviewer before final audit.
+- **Rulings, Not Stalls**: Resolves local design ambiguities pragmatically with logged `[Ruling]` receipts and pauses only on destructive actions, public contract ambiguity, missing secrets, or two failed fix attempts on the same blocker.
+- **Stopword-Safe Bilingual Lesson Archive**: `match-lessons` pairs word-boundary English tokens (filtering noise stopwords) with CJK bigrams to recall `<= 3` pointed lessons per run; `distill` enforces bilingual keywords and grounded evidence on runs with blockers, while `skip-distill` skips trivial clean runs.
 
 ## Installation
 
-Mission Runner targets Claude Code. Earlier releases shipped Cursor rule files
-(`.cursorrules` / `.cursor/rules/*.mdc`) but those were never updated to the
-v1.1 protocol (Compliance Check, Pre-Promise Audit, Phase 5 Distill, Prior
-Lessons glob) and have been removed.
+Clone the repository and symlink it into your active skill directory so local updates apply immediately:
 
 ```bash
-# Clone the repository
-git clone https://github.com/sputnicyoji/Claude-Skill-MissionRunner.git
+git clone https://github.com/sputnicyoji/Claude-Skill-MissionRunner.git ~/Projects/Claude-Skill-MissionRunner
 
-# Copy to your project
-mkdir -p .claude/skills/mission-runner
-cp Claude-Skill-MissionRunner/SKILL.md .claude/skills/mission-runner/
-cp -r Claude-Skill-MissionRunner/references .claude/skills/mission-runner/
+# Claude Code
+ln -s ~/Projects/Claude-Skill-MissionRunner ~/.claude/skills/mission-runner
+
+# Codex CLI / shared agent skills
+ln -s ~/Projects/Claude-Skill-MissionRunner ~/.agents/skills/mission-runner
 ```
+
+Requires Python 3.9+ and Git; uses only Python standard library modules.
 
 ## Quick Start
 
-### Basic Usage
+Trigger via natural requests ("execute this mission", "auto-iterate through these specs") or invoke `mission-runner` explicitly on multi-file tasks:
 
-```
-[MISSION RUNNER - PIR MODE]
-
-## Task
-Add user authentication feature to the application
-
-## Phase 0: Initialization
-1. mkdir -p _planning
-2. Create mission_plan.md and mission_notes.md
-3. Break down tasks into Phases
-
-## Iteration Rules
-1. Read-Before-Decide: Read _planning/mission_plan.md
-2. Execute: Execute next [ ] task. **Do NOT mark [x] yet** (Rule 0 — [x] is reserved for Step 3.6 verdict=pass)
-3. Validate: Build/lint/test check
-4. Step 3.6 Compliance Check: diff vs plan; only on `pass` is [x] applied
-5. Checkpoint: Update Progress Log
-
-## Completion Criteria
-<promise>Mission Accomplished</promise>
+```text
+Implement idempotent order refunds across refund service and unit tests.
 ```
 
-### File Structure Created
+Behind the scenes, the orchestrator drives `scripts/mission_ctl.py`:
 
 ```
-_planning/                                   # Per-mission (transient)
-├── mission_plan.md       # Tasks + success criteria + Prior Lessons + progress
-├── mission_notes.md      # Findings + decisions + failures + Compliance Checks +
-│                         #   Distilled Lessons + Audit Trail
-└── workflow_state.json   # State machine position (optional)
-
-~/.claude/mission-archive/                   # Cross-mission (persistent)
-└── {project-slug}/
-    └── lessons/
-        └── {YYYY-MM-DD}-{topic-kebab}.md   # ≤150-word reusable insights
+init (slug + snapshot + match-lessons)
+  └─▶ task-start T1 ──▶ implement ──▶ task-done T1 -- <verify cmd>
+        │                                  │
+        ▼                                  ▼
+   ruling (if needed)            next task / mid-run review
+                                           │
+                                           ▼
+                    diff + fresh read-only review (pass | revise)
+                                           │
+                                           ▼
+                 distill / skip-distill ──▶ audit (cleans logs/)
 ```
 
-## Core Workflow
+## Control Plane CLI (`scripts/mission_ctl.py`)
 
+| Command | Role |
+| :--- | :--- |
+| `slug` | Resolve worktree-safe lowercase kebab archive slug (preserving existing namespaces). |
+| `init` | Protect `_planning/` via `.git/info/exclude`, snapshot baseline tree, match lessons, create compact `plan.md`. |
+| `task-start` | Snapshot current workspace tree before starting a task. |
+| `task-done` | Run verification command, record output log, assert non-empty diff, flip `- [x]` on exit `0`. |
+| `diff` | Show `git diff` / `--stat` across the whole mission or a single task. |
+| `ruling` | Append a pragmatic design ruling and log JSONL receipt. |
+| `review-result` | Record fresh read-only Reviewer verdict (`pass` or `revise`). |
+| `check-criteria` | Mark verified items in `## Success Criteria`. |
+| `match-lessons` | Bilingual stopword-filtered lesson search (`<= 3` pointers). |
+| `distill` / `skip-distill` | Trigger-gated saving of bilingual 10-150 unit lessons (or explicit skip). |
+| `audit` | Enforce zero unchecked tasks/criteria, mechanical receipts, net diff, passing review, and clean `logs/`. |
+| `doctor-archive` | Backup, deduplicate duplicate repo slugs, and repair legacy YAML frontmatter in `~/.claude/mission-archive`. |
+
+## Testing
+
+Run the pure-stdlib unit test suite (including ASCII purity, temporary-index preservation, unborn HEAD, bilingual matching, trigger gating, and archive repair):
+
+```bash
+python3 -m unittest discover -s tests -v
 ```
-Phase 0: Initialize
-├── Parse task
-├── Determine {project-slug}                       (NEW: cross-mission ns)
-├── Glob ~/.claude/mission-archive/{slug}/lessons/ (NEW: historical lesson hits)
-├── Create _planning/ directory
-├── Create mission_plan.md (incl. ## Prior Lessons injected from glob)
-└── Create mission_notes.md (all standard sections)
-
-Each Iteration:
-├── Step 1: Read-Before-Decide (reads Prior Lessons + notes; feeds Confidence Check)
-├── Step 1.5: Confidence Check (4 dimensions)
-├── Step 2: Execute (one task only; does NOT mark [x] yet)
-├── Step 3: Validate (compile/lint/test)
-│      ├── fail -> Step 3.5
-│      └── pass -> Step 3.6
-├── Step 3.5: Self-Reflection (on validation fail OR Step 3.6 escalate)
-├── Step 3.6: Compliance Check (NEW: diff-vs-plan goal-drift verifier)
-│      ├── pass -> mark [x] + Step 4
-│      ├── needs-revision -> don't mark; next iteration continues
-│      └── escalate -> Step 3.5
-└── Step 4: Checkpoint
-       ├── No -> next iteration
-       └── Yes (all done) -> Phase 4 Debrief -> Phase 5 Distill -> 5-item Audit
-
-Phase 4: Debrief        (confirm Success Criteria all [x])
-Phase 5: Distill        (NEW: extract 1-3 ≤150-word lessons to archive)
-Pre-Promise Audit       (NEW: 5-item gate with 3 external signals)
-├── all 5 pass -> <promise>Mission Accomplished</promise>
-└── any fail   -> Partial Report + append to ## Audit Trail
-```
-
-## Confidence Check Protocol
-
-Before executing each task, evaluate on 4 dimensions (1-5 scale):
-
-| Dimension | Question |
-|-----------|----------|
-| Task Understanding | Are requirements fully clear? |
-| Solution Certainty | Is approach unique and clear? |
-| Dependency Clarity | Are APIs/modules identified? |
-| Risk Assessment | Are side effects controllable? |
-
-Decision based on average:
-- **>= 4 (Green)**: Execute directly
-- **3-4 (Yellow)**: Record concerns, then execute
-- **< 3 (Red)**: Ask user for clarification
-
-## Self-Reflection (Reflexion)
-
-When validation fails, generate reflection before retrying:
-
-1. **Why did it fail?** (root cause)
-2. **How to fix?** (specific solution)
-3. **Similar pitfalls?** (learn by analogy)
-
-Error classification:
-- **Simple** (typo/import): Fix immediately (max 2 retries)
-- **Medium** (logic): Record, handle next iteration
-- **Complex** (architecture): Ask user
-
-## State Machine (Advisory Mode)
-
-```
-init -> read_before_decide -> confidence_check -> execute -> validate
-                                    |                           | (pass)
-                                    v (low)                     v
-                                ask_user                  compliance_check
-                                                                | (pass)
-                                                                v
-                                                          checkpoint_mark ([x] HERE, not earlier)
-                                                                |
-                                                                v
-                                                          checkpoint -> read_before_decide (next iter)
-                                                                       OR -> debrief -> distill -> audit -> done
-
-  validate (fail) ---------------> self_reflection -> execute (simple, retry <=2)
-  compliance_check (escalate) ---> self_reflection -> checkpoint (medium, next iter)
-                                                   -> ask_user (complex)
-  compliance_check (needs_revision) -> read_before_decide (no [x], same task next iter)
-```
-
-The state machine is **advisory, not mandatory**. Agent may deviate when needed - just record the reason in `mission_notes.md > Deviations & Reasons`. The critical state — `checkpoint_mark` — is the only place `[x]` can be applied (Rule 0 / Mandate 5). See `references/state-machine.md` for full state-graph detail.
-
-## Theoretical Foundations
-
-Mission Runner incorporates cutting-edge concepts from AI agent research:
-
-| Source | Concept |
-|--------|---------|
-| [Manus AI](https://manus.im/blog/Context-Engineering-for-AI-Agents-Lessons-from-Building-Manus) | Filesystem memory, attention manipulation |
-| [Reflexion (NeurIPS 2023)](https://arxiv.org/abs/2303.11366) | Semantic gradient self-reflection |
-| [CrewAI Flows](https://docs.crewai.com/concepts/flows) | Deterministic skeleton + autonomous pockets |
-| [LangGraph](https://www.langchain.com/langgraph) | Explicit state machine definition |
 
 ## Repository Structure
 
-```
+```text
 Claude-Skill-MissionRunner/
-├── SKILL.md                          # Claude Code skill core spine (~300 lines)
+├── SKILL.md                             # Compact orchestrator spine (<= 160 lines)
+├── README.md                            # Project overview and usage
+├── CHANGELOG.md                         # Release history
+├── scripts/
+│   └── mission_ctl.py                   # Python 3.9+ stdlib control plane CLI
+├── tests/
+│   └── test_mission_ctl.py              # Unit and lifecycle integration suite
 ├── references/
-│   ├── prompt-template.md            # Standalone-agent full prompt (used by /ralph-loop)
-│   ├── state-machine.md              # Full state graph + workflow_state.json schema + anti-hallucination design
-│   ├── self-reflection.md            # Reflexion-paper long-form protocol (Step 3.5)
-│   ├── confidence-check.md           # 4-dimension scoring (Step 1.5 structured form)
-│   ├── file-templates.md             # mission_plan.md / mission_notes.md / lesson schemas
-│   └── status-output.md              # Verbose iteration-boundary ASCII templates (optional)
-├── examples/
-│   └── _planning/                    # Live example mission files
-├── README.md
-├── LICENSE
-└── CHANGELOG.md
+│   ├── subagent-briefs.md               # Implementer & fresh read-only Reviewer templates
+│   ├── schemas.md                       # plan.md, .events.jsonl, lesson YAML contracts
+│   └── harness-adapters.md              # Claude Code, Codex CLI, Gemini/Antigravity notes
+└── examples/
+    └── _planning/
+        └── 20261114-order-refund/
+            └── plan.md                  # Sample v3 completed mission artifact
 ```
-
-SKILL.md is the always-loaded core. The `references/` files are loaded only when SKILL.md instructs Claude to read them (progressive disclosure pattern — keeps the per-trigger context cost low).
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Keep `scripts/mission_ctl.py` zero-dependency Python 3.9+ stdlib and pure ASCII (`\u4e00-\u9fff` escapes in code), and run `python3 -m unittest discover -s tests -v` before committing.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- [Anthropic](https://anthropic.com) for Claude Code
-- The AI agent research community
-- All contributors and users
-
----
-
-<p align="center">
-  <sub>Built with PIR methodology for autonomous AI development</sub>
-</p>
+MIT

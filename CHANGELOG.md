@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-11-14
+
+### Added
+- Mechanical control-plane CLI (`scripts/mission_ctl.py`, Python 3.9+ stdlib, pure ASCII) with full unit/lifecycle suite (`tests/test_mission_ctl.py`).
+- Temporary `GIT_INDEX_FILE` + `git write-tree` snapshotting supporting clean, dirty, staged, linked worktree, and unborn-HEAD repositories without disturbing the user's real git index.
+- Automatic `_planning/` isolation via `<git-common-dir>/info/exclude` instead of mutating tracked `.gitignore`.
+- Stopword-filtered, word-boundary English + CJK-bigram lesson matcher (`match-lessons`) and trigger-gated bilingual lesson distillation (`distill`, `skip-distill`).
+- Archive namespace reconciliation and frontmatter repair utility (`doctor-archive`).
+- Lean v3 reference guides: `references/subagent-briefs.md`, `references/schemas.md`, `references/harness-adapters.md`, and live-generated v3 sample `examples/_planning/20261114-order-refund/plan.md`.
+
+### Changed
+- Rewrote `SKILL.md` to a concise `<= 160`-line positive-framed orchestrator supporting both inline execution (`<= 3` coupled tasks) and fresh per-task Implementer delegation (`4+` cross-file tasks).
+- Replaced self-graded Compliance Checks with mechanical `task-done` verification receipts, `audit` integrity gating, and one mandatory fresh read-only Reviewer pass over `mission_ctl.py diff`.
+- Replaced `R1-R5` stall prompts with "Rulings, not stalls" logged via `ruling`, escalating only on four hard boundaries.
+- Updated `README.md` to match the v3 architecture and CLI workflow.
+
+### Removed
+- Removed legacy promise-tag completion markers and external loop-plugin coupling.
+- Removed legacy v2 prose reference files (`confidence-check.md`, `file-templates.md`, `prompt-template.md`, `self-reflection.md`, `state-machine.md`, `status-output.md`) and legacy `examples/_planning/{mission_plan.md,mission_notes.md,workflow_state.json}`.
+
 ### Fixed (2026-05-24 — post v2-spine code review)
 
 A 5-angle code review on the v2 spine rewrite surfaced 15 confirmed issues. All fixed in this pass:
