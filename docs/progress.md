@@ -1,5 +1,11 @@
 # Progress
 
+## 2026-11-14 17:19 — Windows 兼容修复：换行、编码与测试隔离
+
+在未开 UTF-8 模式的中文 Windows 上复现并修复 `mission_ctl.py` 两类进程边界缺陷。一是文本模式写文件把 `\n` 转成 CRLF，plan.md、lesson、`logs/.events.jsonl`、任务日志和 `.git/info/exclude` 全部受影响；现在所有写入都传 `newline="\n"`。二是子进程解码与管道 stdout 走 ANSI 代码页 cp936：`diff --mission` 遇中文内容崩溃，`task-done` 遇 UTF-8 中文输出崩溃，lesson 指针以 GBK 字节交给代理；现在 git 输出按 UTF-8 解码，验证命令输出先试 UTF-8 再回退本地代码页，CLI 入口把 stdout/stderr 设为 UTF-8。测试套件同时改为隔离开发者的全局 git 配置和上层仓库，不再因本机环境误报两项失败。每处修复都逐项改坏验证过，单独回退任一处，对应用例即变红。已知局限：diff 里以 GBK 等非 UTF-8 编码存储的文件，其行内中文显示为 U+FFFD。
+
+锚点：`scripts/mission_ctl.py`、`tests/test_mission_ctl.py`（`10/10` 通过，含去掉 `PYTHONUTF8`/`PYTHONIOENCODING` 的模拟环境）、`CHANGELOG.md` `[Unreleased]`、commits `ff39ac0`、`376decb`、`9d8ef3c`。
+
 ## 2026-11-14 16:31 — 仓库更名与通用技能入口收敛
 
 将 GitHub 仓库由 `sputnicyoji/Claude-Skill-MissionRunner` 更名为 `sputnicyoji/mission-runner`，消除早期单端厂商前缀，与 `SKILL.md` 的 `name: mission-runner` 及跨代理通用技能定位保持一致。同步完成本地工作树迁移、`origin` 远端地址切换与四端全局技能软链（`~/.agents`、`~/.claude`、`~/.gemini/config`、`~/.cursor`）重指校验，并在 `README.md` 补充 `npx skills add sputnicyoji/mission-runner -g` 通用安装入口与更新后的仓库结构树；当前全仓工作树干净并与远端同步，后续转入真实跨模块任务中的实战效果观察。
