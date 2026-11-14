@@ -111,7 +111,8 @@ def atomic_write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(prefix=".tmp_", dir=str(path.parent))
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        # newline="\n": text mode would otherwise write CRLF on Windows.
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(content)
         os.replace(tmp_name, str(path))
     except Exception:
@@ -221,7 +222,9 @@ def ensure_planning_excluded(ctx: GitContext) -> None:
     if "_planning/" in lines or "_planning" in lines:
         return
     prefix = "" if not existing or existing.endswith("\n") else "\n"
-    exclude_path.write_text(existing + prefix + "_planning/\n", encoding="utf-8")
+    # Rewrite in place: keeps the user's file mode, which a temp-file swap would reset.
+    with exclude_path.open("w", encoding="utf-8", newline="\n") as fh:
+        fh.write(existing + prefix + "_planning/\n")
 
 
 def non_git_tree_digest(root: Path) -> str:
@@ -279,7 +282,7 @@ def append_event(mission_dir: Path, payload: Dict[str, Any]) -> None:
     logs_dir.mkdir(parents=True, exist_ok=True)
     events_path = logs_dir / ".events.jsonl"
     record = {"ts": iso_now(), **payload}
-    with events_path.open("a", encoding="utf-8") as fh:
+    with events_path.open("a", encoding="utf-8", newline="\n") as fh:
         fh.write(json.dumps(record, ensure_ascii=True) + "\n")
 
 
@@ -930,7 +933,7 @@ def cmd_task_done(args: argparse.Namespace, cmd_tokens: List[str]) -> int:
         f"$ {cmd_display}\n"
         f"{proc.stdout or ''}\n"
     )
-    with log_path.open("a", encoding="utf-8") as fh:
+    with log_path.open("a", encoding="utf-8", newline="\n") as fh:
         fh.write(log_entry)
 
     out_lines = (proc.stdout or "").splitlines()

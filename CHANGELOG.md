@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `mission_ctl.py` wrote CRLF line endings on Windows: text-mode writes translated `\n` to `os.linesep` in `plan.md`, distilled and repaired lessons, `logs/.events.jsonl`, task logs, and `.git/info/exclude`. Every writer now passes `newline="\n"`, and `test_written_files_use_lf_line_endings` covers each one.
+
 ## [3.0.0] - 2026-11-14
 
 ### Added

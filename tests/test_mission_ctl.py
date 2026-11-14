@@ -369,6 +369,78 @@ class TestMissionCtlCore(unittest.TestCase):
         self.assertIn("Status: `completed`", final_plan)
         self.assertIn("- [Audit] pass", final_plan)
 
+    def test_written_files_use_lf_line_endings(self) -> None:
+        # Text-mode writes translate "\n" to os.linesep, which made every
+        # generated file CRLF on Windows. Each writer must emit LF on any OS.
+        repo = self.tmp / "eol"
+        init_git_repo(repo, origin_url="https://github.com/org/eol.git")
+        res = run_ctl(
+            "init",
+            "--cwd",
+            str(repo),
+            "--archive-dir",
+            str(self.archive),
+            "--title",
+            "Line Endings",
+            "--objective",
+            "Keep generated files LF",
+            "--task",
+            "Touch a file",
+            "--criteria",
+            "Only LF bytes",
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        mission_dir = next((repo / "_planning").iterdir())
+
+        self.assertEqual(
+            run_ctl("task-start", "T1", "--mission", str(mission_dir)).returncode,
+            0,
+        )
+        (repo / "touched.txt").write_text("x\n", encoding="utf-8")
+        done = run_ctl(
+            "task-done",
+            "T1",
+            "--mission",
+            str(mission_dir),
+            "--",
+            sys.executable,
+            "-c",
+            "print('line 1'); print('line 2')",
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+        distilled = run_ctl(
+            "distill",
+            "--mission",
+            str(mission_dir),
+            "--archive-dir",
+            str(self.archive),
+            "--name",
+            "lf-line-endings",
+            "--description",
+            "Write LF line endings on every OS",
+            "--keywords",
+            "newline, crlf, \u6362\u884c",
+            "--evidence",
+            "task-T1 log",
+            "--body",
+            "Open text files for writing with an explicit newline argument so Windows does not translate LF into CRLF.",
+        )
+        self.assertEqual(distilled.returncode, 0, distilled.stderr)
+
+        written = [
+            mission_dir / "plan.md",
+            mission_dir / "logs" / ".events.jsonl",
+            mission_dir / "logs" / "task-T1.log",
+            Path(distilled.stdout.strip()),
+        ]
+        # init skips the exclude entry when a global ignore already covers _planning/.
+        exclude = repo / ".git" / "info" / "exclude"
+        if b"_planning/" in exclude.read_bytes():
+            written.append(exclude)
+        for path in written:
+            self.assertNotIn(b"\r", path.read_bytes(), str(path))
+
 
 class TestMissionCtlArchiveAndBilingual(unittest.TestCase):
     def setUp(self) -> None:
