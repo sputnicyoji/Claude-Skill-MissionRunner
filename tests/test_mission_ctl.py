@@ -52,13 +52,14 @@ def init_git_repo(
         run_git(path, "commit", "-m", "init")
 
 
-def run_ctl(*args: str, cwd: Path = None) -> subprocess.CompletedProcess:
+def run_ctl(*args: str, cwd: Path = None, env: dict = None) -> subprocess.CompletedProcess:
     cmd = [sys.executable, str(SCRIPT_PATH), *args]
     return subprocess.run(
         cmd,
         cwd=str(cwd) if cwd else None,
-        env=TEST_ENV,
-        text=True,
+        env=env or TEST_ENV,
+        encoding="utf-8",
+        errors="replace",
         capture_output=True,
     )
 
@@ -549,6 +550,88 @@ class TestMissionCtlArchiveAndBilingual(unittest.TestCase):
         )
         self.assertEqual(res_init.returncode, 0, res_init.stderr)
         self.assertIn("refund-idempotency", res_init.stdout)
+
+    def test_utf8_at_process_boundaries_without_utf8_mode(self) -> None:
+        # Stock Windows Python decodes child output and encodes piped stdout
+        # with the ANSI code page (cp936 on Chinese systems). Dropping
+        # PYTHONUTF8 restores that default for child output where the OS has
+        # one; PYTHONIOENCODING=gbk forces a GBK stdout on every OS.
+        env = {k: v for k, v in TEST_ENV.items() if k != "PYTHONUTF8"}
+        env["PYTHONIOENCODING"] = "gbk"
+        refund = "\u9000\u6b3e\u5e42\u7b49"
+        self._write_lesson(
+            "sample-app",
+            "2026-07-02-refund-idempotency.md",
+            '---\n'
+            'name: "refund-idempotency"\n'
+            f'description: "{refund} guard"\n'
+            f'keywords: ["refund", "{refund}"]\n'
+            'mission_date: "2026-07-02"\n'
+            '---\n\n'
+            '**Lesson:** Use an idempotency key for refunds.\n',
+        )
+
+        res_init = run_ctl(
+            "init",
+            "--cwd",
+            str(self.repo),
+            "--archive-dir",
+            str(self.archive),
+            "--title",
+            "Refund Guard",
+            "--objective",
+            f"Fix {refund}",
+            "--task",
+            "Edit refund module",
+            "--task",
+            "Run a native tool",
+            "--criteria",
+            "Tests pass",
+            env=env,
+        )
+        self.assertEqual(res_init.returncode, 0, res_init.stderr)
+        self.assertIn(f"{refund} guard", res_init.stdout)
+        mission_dir = Path(res_init.stdout.splitlines()[0].strip())
+
+        self.assertEqual(
+            run_ctl("task-start", "T1", "--mission", str(mission_dir), env=env).returncode,
+            0,
+        )
+        (self.repo / "refund.py").write_text(f"# {refund}\n", encoding="utf-8")
+        utf8_done = run_ctl(
+            "task-done",
+            "T1",
+            "--mission",
+            str(mission_dir),
+            "--",
+            sys.executable,
+            "-c",
+            f"import sys; sys.stdout.buffer.write({ascii(refund)}.encode('utf-8') + b' ok')",
+            env=env,
+        )
+        self.assertEqual(utf8_done.returncode, 0, utf8_done.stdout + utf8_done.stderr)
+        self.assertIn(f"{refund} ok", utf8_done.stdout)
+        log_text = (mission_dir / "logs" / "task-T1.log").read_text(encoding="utf-8")
+        self.assertIn(f"{refund} ok", log_text)
+
+        # Native Windows tools print in the ANSI code page; task-done must not crash on it.
+        gbk_done = run_ctl(
+            "task-done",
+            "T2",
+            "--mission",
+            str(mission_dir),
+            "--verify-only",
+            "--",
+            sys.executable,
+            "-c",
+            f"import sys; sys.stdout.buffer.write({ascii(refund)}.encode('gbk'))",
+            env=env,
+        )
+        self.assertEqual(gbk_done.returncode, 0, gbk_done.stdout + gbk_done.stderr)
+
+        diff = run_ctl("diff", "--mission", str(mission_dir), env=env)
+        self.assertEqual(diff.returncode, 0, diff.stderr)
+        self.assertIn(f"+# {refund}", diff.stdout)
 
     def test_distill_validation_and_skip_trigger_gate(self) -> None:
         res_init = run_ctl(

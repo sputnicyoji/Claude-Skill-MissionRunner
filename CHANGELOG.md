@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `mission_ctl.py` wrote CRLF line endings on Windows: text-mode writes translated `\n` to `os.linesep` in `plan.md`, distilled and repaired lessons, `logs/.events.jsonl`, task logs, and `.git/info/exclude`. Every writer now passes `newline="\n"`, and `test_written_files_use_lf_line_endings` covers each one.
 - The test suite no longer depends on the developer's git setup. `TEST_ENV` skips global and system git config and stops repository discovery at the temp root, so a global `_planning/` ignore or a home directory under git no longer fails the exclude and slug tests.
+- On a Windows Python without UTF-8 mode, `mission_ctl.py` used the ANSI code page (e.g. cp936) at every process boundary: `diff` and `task-done` crashed on CJK output, and piped stdout reached agents as GBK. Git output is now decoded as UTF-8, verification output as UTF-8 with a locale fallback for native tools, and stdout/stderr are UTF-8. Covered by `test_utf8_at_process_boundaries_without_utf8_mode`.
 
 ## [3.0.0] - 2026-11-14
 

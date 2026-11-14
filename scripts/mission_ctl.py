@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import hashlib
 import json
+import locale
 import os
 from pathlib import Path
 import re
@@ -127,16 +128,33 @@ def run_git(
     env: Optional[Dict[str, str]] = None,
     check: bool = False,
 ) -> subprocess.CompletedProcess:
+    # Git prints UTF-8; the default text mode would decode it with the
+    # Windows ANSI code page and crash on CJK diffs. Diff lines from files
+    # stored in another encoding (e.g. GBK sources) show as U+FFFD.
     proc = subprocess.run(
         ["git", *args],
         cwd=str(cwd),
         env=env,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         capture_output=True,
     )
     if check and proc.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
     return proc
+
+
+def decode_output(data: bytes) -> str:
+    """Decode a verification command's output without ever raising.
+
+    Most toolchains print UTF-8; native Windows tools print the ANSI code
+    page (e.g. cp936), so fall back to the locale encoding.
+    """
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        text = data.decode(locale.getpreferredencoding(False), errors="replace")
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def resolve_git_path(base: Path, raw_path: str) -> Path:
@@ -910,7 +928,6 @@ def cmd_task_done(args: argparse.Namespace, cmd_tokens: List[str]) -> int:
             cmd_tokens[0],
             cwd=str(workspace_root),
             shell=True,
-            text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
@@ -919,11 +936,11 @@ def cmd_task_done(args: argparse.Namespace, cmd_tokens: List[str]) -> int:
         proc = subprocess.run(
             cmd_tokens,
             cwd=str(workspace_root),
-            text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
         cmd_display = " ".join(cmd_tokens)
+    output = decode_output(proc.stdout or b"")
 
     safe_id = re.sub(r"[^A-Za-z0-9._-]+", "_", args.task_id)
     log_path = mission_dir / "logs" / f"task-{safe_id}.log"
@@ -931,12 +948,12 @@ def cmd_task_done(args: argparse.Namespace, cmd_tokens: List[str]) -> int:
     log_entry = (
         f"=== {human_now()} | task={args.task_id} | exit={proc.returncode} ===\n"
         f"$ {cmd_display}\n"
-        f"{proc.stdout or ''}\n"
+        f"{output}\n"
     )
     with log_path.open("a", encoding="utf-8", newline="\n") as fh:
         fh.write(log_entry)
 
-    out_lines = (proc.stdout or "").splitlines()
+    out_lines = output.splitlines()
     print(f"exit_code={proc.returncode} log={log_path}")
     for line in out_lines[-15:]:
         print(line)
@@ -1724,4 +1741,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 
 if __name__ == "__main__":
+    # Agents read this CLI through pipes, which a stock Windows Python would
+    # encode in the ANSI code page (e.g. cp936) instead of UTF-8.
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8")
     sys.exit(main())
