@@ -1,7 +1,7 @@
 # Mission Runner
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/sputnicyoji/Claude-Skill-MissionRunner)](https://github.com/sputnicyoji/Claude-Skill-MissionRunner/releases)
+[![Release](https://img.shields.io/github/v/release/sputnicyoji/mission-runner)](https://github.com/sputnicyoji/mission-runner/releases)
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B%20stdlib-blue.svg)](scripts/mission_ctl.py)
 
 Mechanically verified full-loop task orchestrator skill for AI coding agents across Claude Code, Codex CLI/App, Antigravity / Gemini CLI, and Cursor.
@@ -30,13 +30,17 @@ Mission Runner v3 pairs a compact positive-framed orchestrator spine ([SKILL.md]
 
 ## Installation & Multi-Harness Setup
 
-Clone the repository once and symlink it so all local harnesses share the exact same version:
+Install via the universal `skills` CLI, or clone once and symlink so all local harnesses share the exact same working tree:
 
 ```bash
-git clone https://github.com/sputnicyoji/Claude-Skill-MissionRunner.git ~/Projects/Claude-Skill-MissionRunner
+# Option A: Universal skills CLI
+npx skills add sputnicyoji/mission-runner -g
+
+# Option B: Clone once and symlink across local harnesses
+git clone https://github.com/sputnicyoji/mission-runner.git ~/Projects/mission-runner
 
 # Shared agent skills root (Codex CLI / Codex App reads ~/.agents/skills)
-ln -s ~/Projects/Claude-Skill-MissionRunner ~/.agents/skills/mission-runner
+ln -s ~/Projects/mission-runner ~/.agents/skills/mission-runner
 
 # Claude Code
 ln -s ../../.agents/skills/mission-runner ~/.claude/skills/mission-runner
@@ -142,11 +146,13 @@ python3 -m unittest discover -s tests -v
 - [examples/_planning/20261114-order-refund/plan.md](examples/_planning/20261114-order-refund/plan.md) -- Sample completed v3 mission plan
 
 ```text
-Claude-Skill-MissionRunner/
+mission-runner/
 ├── SKILL.md
 ├── README.md
 ├── CHANGELOG.md
 ├── LICENSE
+├── docs/
+│   └── progress.md
 ├── scripts/
 │   └── mission_ctl.py
 ├── tests/
