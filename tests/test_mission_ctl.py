@@ -12,11 +12,23 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_PATH = REPO_ROOT / "scripts" / "mission_ctl.py"
 TEST_PATH = Path(__file__).resolve()
 
+# Hermetic git for the suite and for mission_ctl's own git calls: skip the
+# developer's global and system config (a global excludesFile may already
+# ignore _planning/), and stop repository discovery at the temp root (a home
+# directory under version control would otherwise adopt "non-git" fixtures).
+TEST_ENV = dict(
+    os.environ,
+    GIT_CONFIG_GLOBAL=os.devnull,
+    GIT_CONFIG_NOSYSTEM="1",
+    GIT_CEILING_DIRECTORIES=tempfile.gettempdir(),
+)
+
 
 def run_git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", *args],
         cwd=str(cwd),
+        env=TEST_ENV,
         text=True,
         capture_output=True,
         check=True,
@@ -45,6 +57,7 @@ def run_ctl(*args: str, cwd: Path = None) -> subprocess.CompletedProcess:
     return subprocess.run(
         cmd,
         cwd=str(cwd) if cwd else None,
+        env=TEST_ENV,
         text=True,
         capture_output=True,
     )
@@ -433,11 +446,8 @@ class TestMissionCtlCore(unittest.TestCase):
             mission_dir / "logs" / ".events.jsonl",
             mission_dir / "logs" / "task-T1.log",
             Path(distilled.stdout.strip()),
+            repo / ".git" / "info" / "exclude",
         ]
-        # init skips the exclude entry when a global ignore already covers _planning/.
-        exclude = repo / ".git" / "info" / "exclude"
-        if b"_planning/" in exclude.read_bytes():
-            written.append(exclude)
         for path in written:
             self.assertNotIn(b"\r", path.read_bytes(), str(path))
 
