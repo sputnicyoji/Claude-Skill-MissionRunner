@@ -1,0 +1,6 @@
+.DS_Store
+.scratch/
+_planning/
+__pycache__/
+*.py[cod]
+.pytest_cache/
