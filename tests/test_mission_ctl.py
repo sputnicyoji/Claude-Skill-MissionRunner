@@ -370,5 +370,345 @@ class TestMissionCtlCore(unittest.TestCase):
         self.assertIn("- [Audit] pass", final_plan)
 
 
+class TestMissionCtlArchiveAndBilingual(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="mctl_arch_"))
+        self.archive = self.tmp / "archive"
+        self.archive.mkdir(parents=True, exist_ok=True)
+        self.repo = self.tmp / "sample-app"
+        init_git_repo(self.repo, origin_url="https://github.com/org/sample-app.git")
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _write_lesson(self, ns: str, filename: str, raw: str) -> Path:
+        lessons_dir = self.archive / ns / "lessons"
+        lessons_dir.mkdir(parents=True, exist_ok=True)
+        p = lessons_dir / filename
+        p.write_text(raw, encoding="utf-8")
+        return p
+
+    def test_match_lessons_stopword_rejection_word_boundary_and_cjk_bigrams(self) -> None:
+        self._write_lesson(
+            "sample-app",
+            "2026-07-01-token-integrity.md",
+            '---\n'
+            'name: "token-integrity"\n'
+            'description: "Verify token format in storage layer"\n'
+            'keywords: ["token", "format", "storage"]\n'
+            'mission_date: "2026-07-01"\n'
+            '---\n\n'
+            '# Lesson: token-integrity\n\n'
+            '**Lesson:** Check token length before writing.\n',
+        )
+        self._write_lesson(
+            "sample-app",
+            "2026-07-02-refund-idempotency.md",
+            '---\n'
+            'name: "refund-idempotency"\n'
+            'description: "\u9000\u6b3e\u5e42\u7b49\u6821\u9a8c\u5fc5\u987b\u9501\u8ba2\u5355"\n'
+            'keywords: ["refund", "idempotency", "\u9000\u6b3e", "\u5e42\u7b49"]\n'
+            'mission_date: "2026-07-02"\n'
+            '---\n\n'
+            '# Lesson: refund-idempotency\n\n'
+            '**Lesson:** Use an idempotency key for refunds.\n',
+        )
+
+        # 1. Pure stopwords or substring traps ('in' vs 'integrity', 'to' vs 'token') return 0 matches
+        res_noise = run_ctl(
+            "match-lessons",
+            "--cwd",
+            str(self.repo),
+            "--archive-dir",
+            str(self.archive),
+            "--query",
+            "add a new file in the code to fix for and with",
+        )
+        self.assertEqual(res_noise.returncode, 0, res_noise.stderr)
+        self.assertEqual(res_noise.stdout.strip(), "")
+
+        # 2. Word boundary: 'form' must NOT match keyword 'format'; 'for' must NOT match 'format'
+        res_sub = run_ctl(
+            "match-lessons",
+            "--cwd",
+            str(self.repo),
+            "--archive-dir",
+            str(self.archive),
+            "--query",
+            "update form validation logic",
+        )
+        self.assertEqual(res_sub.returncode, 0, res_sub.stderr)
+        self.assertNotIn("token-integrity", res_sub.stdout)
+
+        # 3. CJK bigram query matches CJK lesson and populates init pointers
+        res_cjk = run_ctl(
+            "match-lessons",
+            "--cwd",
+            str(self.repo),
+            "--archive-dir",
+            str(self.archive),
+            "--query",
+            "\u4fee\u590d\u8ba2\u5355\u9000\u6b3e\u5e42\u7b49\u95ee\u9898",
+        )
+        self.assertEqual(res_cjk.returncode, 0, res_cjk.stderr)
+        self.assertIn("refund-idempotency", res_cjk.stdout)
+
+        # 4. init automatically integrates matched lessons into plan.md
+        res_init = run_ctl(
+            "init",
+            "--cwd",
+            str(self.repo),
+            "--archive-dir",
+            str(self.archive),
+            "--title",
+            "Fix Refund",
+            "--objective",
+            "\u9000\u6b3e\u5e42\u7b49\u4fee\u590d",
+        )
+        self.assertEqual(res_init.returncode, 0, res_init.stderr)
+        self.assertIn("refund-idempotency", res_init.stdout)
+
+    def test_distill_validation_and_skip_trigger_gate(self) -> None:
+        res_init = run_ctl(
+            "init",
+            "--cwd",
+            str(self.repo),
+            "--archive-dir",
+            str(self.archive),
+            "--title",
+            "Auth Fix",
+            "--objective",
+            "Fix session timeout",
+            "--task",
+            "Patch session code",
+            "--criteria",
+            "Tests pass",
+        )
+        self.assertEqual(res_init.returncode, 0, res_init.stderr)
+        mission_dir = next((self.repo / "_planning").iterdir())
+
+        # Clean run without failures -> skip-distill succeeds
+        res_clean = run_ctl(
+            "init",
+            "--cwd",
+            str(self.repo),
+            "--archive-dir",
+            str(self.archive),
+            "--title",
+            "Clean Task",
+            "--objective",
+            "Simple edit",
+        )
+        self.assertEqual(res_clean.returncode, 0)
+        clean_dir = Path(res_clean.stdout.splitlines()[0].strip())
+        self.assertEqual(
+            run_ctl(
+                "skip-distill",
+                "--mission",
+                str(clean_dir),
+                "--reason",
+                "Routine typo fix with zero blockers",
+            ).returncode,
+            0,
+        )
+
+        # Fail T1 once to trip distillation trigger
+        run_ctl(
+            "task-done",
+            "T1",
+            "--mission",
+            str(mission_dir),
+            "--",
+            sys.executable,
+            "-c",
+            "import sys; sys.exit(1)",
+        )
+        # skip-distill without --local-only must fail with exit 2
+        res_block = run_ctl(
+            "skip-distill",
+            "--mission",
+            str(mission_dir),
+            "--reason",
+            "Want to skip",
+        )
+        self.assertEqual(res_block.returncode, 2)
+
+        # Distill rejects missing CJK keyword unless --ascii-only
+        res_no_cjk = run_ctl(
+            "distill",
+            "--mission",
+            str(mission_dir),
+            "--archive-dir",
+            str(self.archive),
+            "--name",
+            "session-timeout",
+            "--description",
+            "Set explicit timeout",
+            "--keywords",
+            "session, timeout",
+            "--evidence",
+            "task-T1 failure then pass",
+            "--body",
+            "Always configure explicit timeout values on network clients so idle sockets fail fast cleanly.",
+        )
+        self.assertEqual(res_no_cjk.returncode, 2)
+
+        # Distill rejects overly short body (< 10 units)
+        res_short = run_ctl(
+            "distill",
+            "--mission",
+            str(mission_dir),
+            "--archive-dir",
+            str(self.archive),
+            "--name",
+            "session-timeout",
+            "--description",
+            "Set timeout",
+            "--keywords",
+            "session, timeout, \u8d85\u65f6",
+            "--evidence",
+            "task-T1 log",
+            "--body",
+            "Too short.",
+        )
+        self.assertEqual(res_short.returncode, 2)
+
+        # Distill succeeds with bilingual keywords, valid length, and colon-safe YAML
+        res_ok = run_ctl(
+            "distill",
+            "--mission",
+            str(mission_dir),
+            "--archive-dir",
+            str(self.archive),
+            "--name",
+            "session-timeout",
+            "--description",
+            "Timeout rule: always configure socket read timeout",
+            "--keywords",
+            "session, timeout, \u4f1a\u8bdd, \u8d85\u65f6",
+            "--evidence",
+            "task-T1 exit=1 before explicit timeout fix",
+            "--body",
+            "Client calls hang indefinitely when timeout is omitted: always pass an explicit connect and read timeout.",
+        )
+        self.assertEqual(res_ok.returncode, 0, res_ok.stderr)
+        lesson_file = Path(res_ok.stdout.strip())
+        self.assertTrue(lesson_file.is_file())
+        content = lesson_file.read_text(encoding="utf-8")
+        self.assertIn("**Evidence:** task-T1 exit=1", content)
+        self.assertIn('keywords: ["session", "timeout",', content)
+
+    def test_doctor_archive_merges_and_repairs_yaml_preserving_single_slug(self) -> None:
+        repos_dir = self.tmp / "repos"
+        # Repo A: dir 'alpha', remote 'alpha-service', BOTH exist in archive -> merge alpha -> alpha-service
+        init_git_repo(repos_dir / "Alpha", origin_url="git@github.com:org/Alpha-Service.git")
+        # Repo B: dir 'Beta', remote 'remote_beta_app', ONLY 'beta' exists in archive -> preserve 'beta'
+        init_git_repo(repos_dir / "Beta", origin_url="git@github.com:org/remote_beta_app.git")
+        # Non-kebab namespace Gamma_Client -> normalize to gamma-client
+
+        self._write_lesson(
+            "alpha",
+            "2026-06-01-scalar-kw.md",
+            "---\n"
+            "name: scalar-kw\n"
+            "description: Broken: unquoted colon and `backtick` scalar\n"
+            "keywords: replay, cli, \u56de\u653e\n"
+            "metadata:\n"
+            "  mission_date: 2026-06-01\n"
+            "---\n\n"
+            "# Lesson: scalar-kw\n\n"
+            "**Lesson:** Exact verbatim body line 1.\n"
+            "Exact verbatim body line 2.\n",
+        )
+        self._write_lesson(
+            "alpha-service",
+            "2026-06-05-clean.md",
+            '---\n'
+            'name: "clean"\n'
+            'description: "Clean lesson"\n'
+            'keywords: ["clean", "service"]\n'
+            'mission_date: "2026-06-05"\n'
+            '---\n\n'
+            '# Lesson: clean\n\n'
+            '**Lesson:** Keep this body untouched.\n',
+        )
+        self._write_lesson(
+            "Gamma_Client",
+            "2026-06-02-gamma-tip.md",
+            "---\n"
+            "name: gamma-tip\n"
+            "description: `leading backtick tip`\n"
+            "keywords: build, rust\n"
+            "mission_date: 2026-06-02\n"
+            "---\n\n"
+            "**Lesson:** Gamma body preserved.\n",
+        )
+        self._write_lesson(
+            "beta",
+            "2026-06-03-beta-rule.md",
+            '---\n'
+            'name: "beta-rule"\n'
+            'description: "Beta invariant"\n'
+            'keywords: ["beta", "grid"]\n'
+            'mission_date: "2026-06-03"\n'
+            '---\n\n'
+            '**Lesson:** Beta stays under beta namespace.\n',
+        )
+
+        # Dry run leaves archive untouched
+        dry = run_ctl(
+            "doctor-archive",
+            "--archive-dir",
+            str(self.archive),
+            "--scan-repos",
+            str(repos_dir),
+            "--dry-run",
+        )
+        self.assertEqual(dry.returncode, 0, dry.stderr)
+        self.assertIn("alpha -> alpha-service", dry.stdout)
+        self.assertIn("Gamma_Client -> gamma-client", dry.stdout)
+        self.assertNotIn("beta ->", dry.stdout)
+        self.assertTrue((self.archive / "alpha").exists())
+
+        # Apply with backup
+        backup = self.tmp / "archive-backup"
+        app = run_ctl(
+            "doctor-archive",
+            "--archive-dir",
+            str(self.archive),
+            "--scan-repos",
+            str(repos_dir),
+            "--backup-dir",
+            str(backup),
+            "--apply",
+        )
+        self.assertEqual(app.returncode, 0, app.stdout + app.stderr)
+        self.assertTrue((backup / "alpha" / "lessons" / "2026-06-01-scalar-kw.md").is_file())
+        self.assertFalse((self.archive / "alpha").exists())
+        self.assertFalse((self.archive / "Gamma_Client").exists())
+        self.assertTrue((self.archive / "beta" / "lessons" / "2026-06-03-beta-rule.md").is_file())
+        self.assertTrue((self.archive / "gamma-client" / "lessons" / "2026-06-02-gamma-tip.md").is_file())
+
+        merged = (self.archive / "alpha-service" / "lessons" / "2026-06-01-scalar-kw.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('keywords: ["replay", "cli", "\u56de\u653e"]', merged)
+        self.assertIn('mission_date: "2026-06-01"', merged)
+        self.assertIn("Exact verbatim body line 1.\nExact verbatim body line 2.", merged)
+
+        # Repaired archive matches CJK query on alpha-service
+        res_match = run_ctl(
+            "match-lessons",
+            "--cwd",
+            str(repos_dir / "Alpha"),
+            "--archive-dir",
+            str(self.archive),
+            "--query",
+            "\u56de\u653e",
+        )
+        self.assertEqual(res_match.returncode, 0, res_match.stderr)
+        self.assertIn("scalar-kw", res_match.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

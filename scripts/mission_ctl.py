@@ -21,6 +21,57 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 DEFAULT_ARCHIVE_DIR = Path.home() / ".claude" / "mission-archive"
 
+EN_STOPWORDS = frozenset(
+    {
+        "a", "an", "and", "any", "are", "as", "at", "be", "been", "being",
+        "both", "but", "by", "can", "could", "did", "do", "does", "done",
+        "during", "each", "else", "every", "few", "for", "from", "get",
+        "got", "had", "has", "have", "he", "her", "here", "hers", "him",
+        "his", "how", "i", "if", "in", "into", "is", "it", "its", "just",
+        "like", "look", "made", "make", "makes", "many", "may", "me",
+        "might", "mine", "more", "most", "much", "must", "my", "need",
+        "needed", "needs", "new", "no", "not", "now", "of", "off", "ok",
+        "old", "on", "only", "onto", "or", "other", "our", "out", "over",
+        "put", "read", "run", "same", "see", "set", "shall", "she",
+        "should", "so", "some", "such", "than", "that", "the", "their",
+        "them", "then", "there", "these", "they", "this", "those", "to",
+        "too", "under", "up", "upon", "us", "use", "used", "using", "very",
+        "want", "was", "way", "we", "well", "were", "what", "when",
+        "where", "which", "while", "who", "why", "will", "with", "would",
+        "yes", "yet", "you", "your",
+        # Generic coding task verbs/nouns that create false cross-lesson noise
+        "add", "bug", "bugs", "build", "change", "changes", "check",
+        "checks", "code", "create", "delete", "edit", "error", "errors",
+        "file", "files", "fix", "fixed", "fixes", "implement", "issue",
+        "issues", "modify", "note", "notes", "plan", "remove", "task",
+        "tasks", "test", "tests", "update", "updated", "work", "works",
+        "write",
+    }
+)
+
+CJK_STOP_BIGRAMS = frozenset(
+    {
+        "\u4fee\u590d",  # xiu fu
+        "\u6dfb\u52a0",  # tian jia
+        "\u66f4\u65b0",  # geng xin
+        "\u5b9e\u73b0",  # shi xian
+        "\u68c0\u67e5",  # jian cha
+        "\u95ee\u9898",  # wen ti
+        "\u9700\u8981",  # xu yao
+        "\u4f7f\u7528",  # shi yong
+        "\u8fdb\u884c",  # jin xing
+        "\u65b9\u6cd5",  # fang fa
+        "\u5904\u7406",  # chu li
+        "\u4ee3\u7801",  # dai ma
+        "\u6587\u4ef6",  # wen jian
+        "\u6d4b\u8bd5",  # ce shi
+    }
+)
+
+CJK_CHAR_RE = re.compile(r"[\u4e00-\u9fff]")
+CJK_SPAN_RE = re.compile(r"[\u4e00-\u9fff]+")
+KEBAB_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
 
 @dataclass
 class GitContext:
@@ -336,8 +387,374 @@ def append_receipt_line(mission_dir: Path, bullet: str) -> None:
 def find_matched_lessons(
     slug: str, query: str, terms: str, archive_dir: Path, limit: int = 3
 ) -> List[str]:
-    # Implemented cleanly in Ticket 02; returns empty when archive has no indexable files
-    return []
+    if not archive_dir.is_dir():
+        return []
+    lessons_dir = archive_dir / slug / "lessons"
+    if not lessons_dir.is_dir():
+        return []
+
+    q_en, q_cjk, q_norm = tokenize_bilingual(f"{query} {terms}".strip())
+    if not q_en and not q_cjk:
+        return []
+
+    scored: List[Tuple[float, str, str, str]] = []
+    for path in sorted(lessons_dir.glob("*.md")):
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        parsed = parse_lesson_document(raw, path.name)
+        meta = parsed["meta"]
+        name = str(meta.get("name") or infer_lesson_name(path.name))
+        desc = str(meta.get("description") or "").strip()
+        mdate = str(meta.get("mission_date") or infer_lesson_date(path.name) or "unknown")
+        kw_list = [str(k).strip() for k in meta.get("keywords", []) if str(k).strip()]
+
+        kw_en: set[str] = set()
+        kw_cjk: set[str] = set()
+        phrase_bonus = 0.0
+        for kw in kw_list:
+            k_en, k_cjk, k_norm = tokenize_bilingual(kw)
+            kw_en |= k_en
+            kw_cjk |= k_cjk
+            if len(k_norm) >= 2 and (k_en or k_cjk):
+                if re.search(rf"(?<![a-z0-9]){re.escape(k_norm)}(?![a-z0-9])", q_norm):
+                    phrase_bonus += 4.0
+
+        meta_en, meta_cjk, _ = tokenize_bilingual(f"{name} {desc}")
+        body_en, body_cjk, _ = tokenize_bilingual(parsed["body"])
+
+        kw_hits = len(q_en & kw_en) + len(q_cjk & kw_cjk)
+        meta_hits = len(q_en & meta_en) + len(q_cjk & meta_cjk)
+        body_hits = len(q_en & body_en) + len(q_cjk & body_cjk)
+
+        # Require either a strong metadata/keyword signal or >=2 distinct body hits
+        if kw_hits == 0 and meta_hits == 0 and body_hits < 2 and phrase_bonus == 0.0:
+            continue
+
+        score = kw_hits * 5.0 + meta_hits * 2.5 + min(body_hits, 6) * 0.8 + phrase_bonus
+        if score < 2.5:
+            continue
+
+        one_line_desc = collapse_ws(desc) or "No description"
+        pointer = f"- `{name}` ({mdate}) -- {one_line_desc} (`{path}`)"
+        scored.append((score, mdate, name, pointer))
+
+    scored.sort(key=lambda item: (-item[0], -date_sort_key(item[1]), item[2]))
+    return [item[3] for item in scored[: max(limit, 0)]]
+
+
+def date_sort_key(date_str: str) -> int:
+    digits = re.sub(r"[^0-9]", "", date_str)
+    if len(digits) == 8:
+        return int(digits)
+    return 0
+
+
+def stem_en_variants(token: str) -> set[str]:
+    forms = {token}
+    if len(token) >= 5 and token.endswith("ies"):
+        forms.add(token[:-3] + "y")
+    elif len(token) >= 5 and token.endswith("s") and not token.endswith(("ss", "us", "is")):
+        forms.add(token[:-1])
+    return forms
+
+
+def tokenize_bilingual(text: str) -> Tuple[set[str], set[str], str]:
+    split_camel = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", text)
+    norm = re.sub(r"[-_./:]+", " ", split_camel.lower())
+    raw_words = re.findall(r"[a-z0-9]+", norm)
+    en_tokens: set[str] = set()
+    for word in raw_words:
+        if len(word) < 2 or not re.search(r"[a-z]", word):
+            continue
+        if word in EN_STOPWORDS:
+            continue
+        for variant in stem_en_variants(word):
+            if variant not in EN_STOPWORDS:
+                en_tokens.add(variant)
+
+    cjk_bigrams: set[str] = set()
+    for span in CJK_SPAN_RE.findall(text):
+        if len(span) >= 2:
+            for idx in range(len(span) - 1):
+                bg = span[idx : idx + 2]
+                if bg not in CJK_STOP_BIGRAMS:
+                    cjk_bigrams.add(bg)
+    return en_tokens, cjk_bigrams, norm
+
+
+def infer_lesson_date(filename: str) -> str:
+    m = re.match(r"^(\d{4}-\d{2}-\d{2})(?:-|$)", filename)
+    return m.group(1) if m else ""
+
+
+def infer_lesson_name(filename: str) -> str:
+    stem = Path(filename).stem
+    stem = re.sub(r"^\d{4}-\d{2}-\d{2}-", "", stem)
+    stem = re.sub(r"-r\d+$", "", stem)
+    return normalize_slug(stem) or "lesson"
+
+
+def unquote_yaml_scalar(val: str) -> Tuple[str, bool]:
+    s = val.strip()
+    if not s:
+        return "", False
+    if (s.startswith('"') and s.endswith('"') and len(s) >= 2):
+        try:
+            loaded = json.loads(s)
+            if isinstance(loaded, str):
+                return loaded, False
+        except Exception:
+            return s[1:-1], True
+    if s.startswith("'") and s.endswith("'") and len(s) >= 2:
+        return s[1:-1].replace("''", "'"), False
+    if s.startswith('"') or s.startswith("'") or s.endswith('"') or s.endswith("'"):
+        return s.strip("\"'"), True
+    needs_quote = (
+        ": " in s
+        or s.startswith(("`", "*", "&", "{", "[", "#", "!", "|", ">"))
+    )
+    return s, needs_quote
+
+
+def parse_keywords_value(raw_val: str) -> Tuple[List[str], bool]:
+    s = raw_val.strip()
+    if not s:
+        return [], False
+    if s.startswith("["):
+        try:
+            parsed = json.loads(s)
+            if isinstance(parsed, list):
+                return [str(x).strip() for x in parsed if str(x).strip()], False
+        except Exception:
+            pass
+        inner = s[1:-1] if s.endswith("]") else s[1:]
+        items = [unquote_yaml_scalar(p)[0].strip() for p in re.split(r"[,\uff0c]", inner)]
+        return [it for it in items if it], True
+    # Comma-separated scalar keywords
+    items = [unquote_yaml_scalar(p)[0].strip() for p in re.split(r"[,\uff0c]", s)]
+    cleaned = [it for it in items if it]
+    return cleaned, True
+
+
+def split_frontmatter(raw_text: str) -> Tuple[Optional[str], str, bool]:
+    text = raw_text.lstrip("\ufeff").replace("\r\n", "\n")
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return None, text, False
+    for idx in range(1, len(lines)):
+        if lines[idx].strip() == "---":
+            fm = "".join(lines[1:idx])
+            body = "".join(lines[idx + 1 :])
+            return fm, body, False
+    return None, text, True
+
+
+def parse_lesson_document(raw_text: str, filename: str = "") -> Dict[str, Any]:
+    fm_text, body, broken_fence = split_frontmatter(raw_text)
+    issues: List[str] = []
+    meta: Dict[str, Any] = {}
+    nested_meta: Dict[str, Any] = {}
+
+    if broken_fence:
+        issues.append("unclosed_frontmatter")
+    if fm_text is None and not broken_fence:
+        issues.append("missing_frontmatter")
+
+    if fm_text is not None:
+        fm_lines = fm_text.splitlines()
+        i = 0
+        in_metadata_block = False
+        active_list_key: Optional[str] = None
+        while i < len(fm_lines):
+            line = fm_lines[i]
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                i += 1
+                continue
+            indent = len(line) - len(line.lstrip(" "))
+
+            if indent == 0:
+                in_metadata_block = False
+                active_list_key = None
+                m = re.match(r"^([A-Za-z0-9_-]+)\s*:\s*(.*)$", line)
+                if not m:
+                    issues.append("invalid_yaml_line")
+                    i += 1
+                    continue
+                key, rest = m.group(1), m.group(2)
+                if key == "metadata" and not rest.strip():
+                    in_metadata_block = True
+                    issues.append("nested_metadata")
+                    i += 1
+                    continue
+                if not rest.strip():
+                    # Look ahead for YAML list or nested keys
+                    meta[key] = []
+                    active_list_key = key
+                    i += 1
+                    continue
+                if rest.strip() in {"|", ">", "|-", ">-"}:
+                    block_lines: List[str] = []
+                    j = i + 1
+                    while j < len(fm_lines):
+                        nxt = fm_lines[j]
+                        if nxt.strip() and (len(nxt) - len(nxt.lstrip(" ")) == 0):
+                            break
+                        block_lines.append(nxt.strip())
+                        j += 1
+                    meta[key] = collapse_ws(" ".join(block_lines))
+                    i = j
+                    continue
+                if key == "keywords":
+                    kws, was_scalar = parse_keywords_value(rest)
+                    meta["keywords"] = kws
+                    if was_scalar:
+                        issues.append("scalar_keywords")
+                else:
+                    val, unsafe = unquote_yaml_scalar(rest)
+                    meta[key] = val
+                    if unsafe:
+                        issues.append(f"unsafe_scalar:{key}")
+                i += 1
+                continue
+
+            # Indented line
+            if active_list_key is not None and re.match(r"^\s+-\s+(.*)$", line):
+                item_raw = re.match(r"^\s+-\s+(.*)$", line).group(1)
+                val, _ = unquote_yaml_scalar(item_raw)
+                if not isinstance(meta.get(active_list_key), list):
+                    meta[active_list_key] = []
+                if val:
+                    meta[active_list_key].append(val)
+                i += 1
+                continue
+
+            if in_metadata_block:
+                nm = re.match(r"^\s+([A-Za-z0-9_-]+)\s*:\s*(.*)$", line)
+                if nm:
+                    nkey, nrest = nm.group(1), nm.group(2)
+                    if nrest.strip():
+                        nval, _ = unquote_yaml_scalar(nrest)
+                        nested_meta[nkey] = nval
+                i += 1
+                continue
+
+            issues.append("unexpected_indent")
+            i += 1
+
+    # Promote nested metadata keys carefully
+    if "mission_date" in nested_meta and not meta.get("mission_date"):
+        meta["mission_date"] = nested_meta["mission_date"]
+        issues.append("nested_mission_date")
+    if "keywords" not in meta or not meta["keywords"]:
+        if isinstance(meta.get("tags"), list) and meta["tags"]:
+            meta["keywords"] = list(meta["tags"])
+        elif "tags" in nested_meta and nested_meta["tags"]:
+            kws, _ = parse_keywords_value(str(nested_meta["tags"]))
+            meta["keywords"] = kws
+        else:
+            meta.setdefault("keywords", [])
+
+    if isinstance(meta.get("keywords"), str):
+        kws, _ = parse_keywords_value(str(meta["keywords"]))
+        meta["keywords"] = kws
+        issues.append("scalar_keywords")
+
+    if not meta.get("name") and filename:
+        meta["name"] = infer_lesson_name(filename)
+        issues.append("missing_name")
+    else:
+        raw_name = str(meta.get("name", "")).strip()
+        if raw_name and normalize_slug(raw_name) != raw_name and " " in raw_name:
+            meta["name"] = normalize_slug(raw_name)
+
+    if not meta.get("mission_date"):
+        inferred = infer_lesson_date(filename)
+        if inferred:
+            meta["mission_date"] = inferred
+            issues.append("missing_mission_date")
+
+    if not meta.get("description"):
+        fallback_desc = extract_fallback_description(body)
+        if fallback_desc:
+            meta["description"] = fallback_desc
+            issues.append("missing_description")
+
+    return {"meta": meta, "body": body, "issues": issues}
+
+
+def extract_fallback_description(body: str) -> str:
+    for line in body.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        s = re.sub(r"^\*\*[^*]+\*\*:?\s*", "", s)
+        s = collapse_ws(s)
+        if s:
+            return s[:160]
+    return ""
+
+
+def serialize_lesson_frontmatter(meta: Dict[str, Any]) -> str:
+    ordered = ["name", "description", "keywords", "mission_date"]
+    lines = ["---"]
+    for key in ordered:
+        if key == "keywords":
+            kws = [str(k).strip() for k in meta.get("keywords", []) if str(k).strip()]
+            lines.append(f"keywords: {json.dumps(kws, ensure_ascii=False)}")
+        elif key in meta and str(meta[key]).strip():
+            lines.append(f"{key}: {json.dumps(str(meta[key]).strip(), ensure_ascii=False)}")
+    for key, val in meta.items():
+        if key in ordered or key == "metadata":
+            continue
+        if isinstance(val, list):
+            cleaned = [str(x).strip() for x in val if str(x).strip()]
+            lines.append(f"{key}: {json.dumps(cleaned, ensure_ascii=False)}")
+        elif str(val).strip():
+            lines.append(f"{key}: {json.dumps(str(val).strip(), ensure_ascii=False)}")
+    lines.append("---")
+    return "\n".join(lines) + "\n"
+
+
+def validate_strict_frontmatter(raw_text: str) -> List[str]:
+    errs: List[str] = []
+    fm, _, broken = split_frontmatter(raw_text)
+    if broken or fm is None:
+        return ["missing or unclosed frontmatter"]
+    seen_keys: set[str] = set()
+    for lineno, line in enumerate(fm.splitlines(), start=1):
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if line.startswith((" ", "\t")):
+            errs.append(f"line {lineno}: unexpected indentation")
+            continue
+        m = re.match(r"^([A-Za-z0-9_-]+):\s*(.+)$", line)
+        if not m:
+            errs.append(f"line {lineno}: invalid key-value syntax")
+            continue
+        key, raw_val = m.group(1), m.group(2).strip()
+        seen_keys.add(key)
+        if key == "keywords":
+            try:
+                parsed = json.loads(raw_val)
+                if not isinstance(parsed, list):
+                    errs.append(f"line {lineno}: keywords is not a JSON/YAML array")
+            except Exception as exc:
+                errs.append(f"line {lineno}: invalid keywords array ({exc})")
+        else:
+            if raw_val.startswith('"'):
+                try:
+                    parsed = json.loads(raw_val)
+                    if not isinstance(parsed, str):
+                        errs.append(f"line {lineno}: expected string value")
+                except Exception as exc:
+                    errs.append(f"line {lineno}: invalid quoted string ({exc})")
+            elif raw_val.startswith(("`", "*", "&", "{", "[", "'")) or ": " in raw_val:
+                errs.append(f"line {lineno}: unsafe unquoted scalar for {key}")
+    for req in ("name", "description", "keywords", "mission_date"):
+        if req not in seen_keys:
+            errs.append(f"missing required key: {req}")
+    return errs
 
 
 def cmd_slug(args: argparse.Namespace) -> int:
@@ -768,6 +1185,420 @@ def cmd_audit(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_match_lessons(args: argparse.Namespace) -> int:
+    archive_dir = Path(args.archive_dir).expanduser().resolve()
+    if args.slug:
+        slug = normalize_slug(args.slug)
+    else:
+        cwd = Path(args.cwd).resolve()
+        slug = resolve_slug(cwd, archive_dir)
+    pointers = find_matched_lessons(
+        slug=slug,
+        query=args.query,
+        terms=args.terms or "",
+        archive_dir=archive_dir,
+        limit=args.limit,
+    )
+    for item in pointers:
+        print(item)
+    return 0
+
+
+def effective_bilingual_length(text: str) -> int:
+    cjk_count = len(CJK_CHAR_RE.findall(text))
+    ascii_only_text = CJK_CHAR_RE.sub(" ", text)
+    ascii_words = re.findall(r"[A-Za-z0-9_]+", ascii_only_text)
+    return len(ascii_words) + cjk_count
+
+
+def parse_cli_keywords(raw: str) -> List[str]:
+    s = raw.strip()
+    items: List[str] = []
+    if s.startswith("["):
+        try:
+            loaded = json.loads(s)
+            if isinstance(loaded, list):
+                items = [collapse_ws(str(x)) for x in loaded]
+        except Exception:
+            items = [collapse_ws(p) for p in re.split(r"[,\uff0c]", s.strip("[]"))]
+    else:
+        items = [collapse_ws(p) for p in re.split(r"[,\uff0c]", s)]
+    deduped: List[str] = []
+    seen: set[str] = set()
+    for item in items:
+        key = item.lower()
+        if item and key not in seen:
+            seen.add(key)
+            deduped.append(item)
+    return deduped
+
+
+def cmd_distill(args: argparse.Namespace) -> int:
+    mission_dir = resolve_mission_dir(args.mission, Path.cwd())
+    plan_text = (mission_dir / "plan.md").read_text(encoding="utf-8")
+    meta = read_plan_meta(plan_text)
+    slug = normalize_slug(meta.get("Slug", "")) or "workspace"
+
+    name = args.name.strip()
+    if not KEBAB_RE.match(name) or not (2 <= len(name) <= 80):
+        print("DISTILL REJECTED: --name must be lowercase kebab-case (2..80 chars)", file=sys.stderr)
+        return 2
+
+    description = collapse_ws(args.description)
+    if not description:
+        print("DISTILL REJECTED: --description cannot be empty", file=sys.stderr)
+        return 2
+
+    evidence = collapse_ws(args.evidence)
+    if not evidence:
+        print("DISTILL REJECTED: --evidence is required", file=sys.stderr)
+        return 2
+
+    keywords = parse_cli_keywords(args.keywords)
+    if len(keywords) < 2:
+        print("DISTILL REJECTED: at least 2 distinct keywords required", file=sys.stderr)
+        return 2
+
+    if not args.ascii_only:
+        has_ascii = any(re.search(r"[A-Za-z0-9]", kw) for kw in keywords)
+        has_cjk = any(CJK_CHAR_RE.search(kw) for kw in keywords)
+        if not (has_ascii and has_cjk):
+            print(
+                "DISTILL REJECTED: bilingual keywords required (>=1 ASCII and >=1 CJK, or pass --ascii-only)",
+                file=sys.stderr,
+            )
+            return 2
+
+    if args.body_file:
+        body = Path(args.body_file).expanduser().read_text(encoding="utf-8").strip()
+    elif args.body is not None:
+        body = args.body.strip()
+    else:
+        print("DISTILL REJECTED: pass --body or --body-file", file=sys.stderr)
+        return 2
+
+    eff_len = effective_bilingual_length(body)
+    if not (10 <= eff_len <= 150):
+        print(
+            f"DISTILL REJECTED: effective lesson length {eff_len} outside 10..150 units",
+            file=sys.stderr,
+        )
+        return 2
+
+    archive_dir = Path(args.archive_dir).expanduser().resolve()
+    lessons_dir = archive_dir / slug / "lessons"
+    lessons_dir.mkdir(parents=True, exist_ok=True)
+    mdate = now_local().strftime("%Y-%m-%d")
+
+    target = lessons_dir / f"{mdate}-{name}.md"
+    rev = 2
+    while target.exists():
+        target = lessons_dir / f"{mdate}-{name}-r{rev}.md"
+        rev += 1
+
+    fm = serialize_lesson_frontmatter(
+        {
+            "name": name,
+            "description": description,
+            "keywords": keywords,
+            "mission_date": mdate,
+        }
+    )
+    lesson_doc = (
+        f"{fm}\n"
+        f"# Lesson: {name}\n\n"
+        f"**Lesson:** {body}\n\n"
+        f"**Evidence:** {evidence}\n"
+    )
+    atomic_write(target, lesson_doc)
+    append_receipt_line(mission_dir, f"- [Distill] saved `{target}`")
+    append_event(
+        mission_dir,
+        {
+            "event": "distill",
+            "lesson_path": str(target),
+            "name": name,
+            "keywords": keywords,
+        },
+    )
+    print(str(target))
+    return 0
+
+
+def count_distill_triggers(events: List[Dict[str, Any]]) -> Dict[str, int]:
+    failed = sum(
+        1
+        for ev in events
+        if ev.get("event") == "task_attempt" and int(ev.get("exit_code", 0)) != 0
+    )
+    revises = sum(
+        1
+        for ev in events
+        if ev.get("event") == "review" and ev.get("verdict") == "revise"
+    )
+    rulings = sum(1 for ev in events if ev.get("event") == "ruling")
+    return {"failed_attempts": failed, "revise_reviews": revises, "rulings": rulings}
+
+
+def cmd_skip_distill(args: argparse.Namespace) -> int:
+    mission_dir = resolve_mission_dir(args.mission, Path.cwd())
+    reason = collapse_ws(args.reason)
+    if not reason:
+        print("SKIP REJECTED: --reason cannot be empty", file=sys.stderr)
+        return 2
+    events = read_events(mission_dir)
+    triggers = count_distill_triggers(events)
+    total = sum(triggers.values())
+    if total > 0 and not args.local_only:
+        print(
+            f"SKIP REJECTED: {total} learning trigger(s) recorded ({triggers}). "
+            f"Distill 1-2 lessons or pass --local-only if strictly machine/one-off.",
+            file=sys.stderr,
+        )
+        return 2
+    append_receipt_line(mission_dir, f"- [Distill] skipped (reason=\"{reason}\")")
+    append_event(
+        mission_dir,
+        {
+            "event": "skip_distill",
+            "reason": reason,
+            "local_only": bool(args.local_only),
+            "triggers": triggers,
+        },
+    )
+    print(f"skip_distill recorded ({reason})")
+    return 0
+
+
+def discover_scan_repo_merges(
+    scan_root: Path, existing_dirs: Dict[str, Path]
+) -> List[Tuple[str, str, str]]:
+    if not scan_root.is_dir():
+        return []
+    candidates: List[Path] = []
+    if (scan_root / ".git").exists():
+        candidates.append(scan_root)
+    else:
+        for child in sorted(scan_root.iterdir()):
+            if child.is_dir() and (child / ".git").exists():
+                candidates.append(child)
+
+    norm_map = {normalize_slug(k): k for k in existing_dirs}
+    merges: List[Tuple[str, str, str]] = []
+    for repo in candidates:
+        ctx = detect_git_context(repo)
+        if ctx is None:
+            continue
+        dir_slug = normalize_slug(ctx.main_root.name)
+        origin_slug = parse_origin_slug(ctx.origin_url)
+        if not origin_slug or not dir_slug or origin_slug == dir_slug:
+            continue
+        if dir_slug in norm_map and origin_slug in norm_map:
+            src_actual = norm_map[dir_slug]
+            dst_actual = norm_map[origin_slug]
+            if src_actual != dst_actual:
+                merges.append((src_actual, dst_actual, f"repo {repo.name} duplicate slug"))
+    return merges
+
+
+def cmd_doctor_archive(args: argparse.Namespace) -> int:
+    archive_dir = Path(args.archive_dir).expanduser().resolve()
+    if not archive_dir.is_dir():
+        print(f"Archive directory not found: {archive_dir}", file=sys.stderr)
+        return 1
+
+    existing_dirs = {
+        d.name: d
+        for d in sorted(archive_dir.iterdir())
+        if d.is_dir() and not d.name.startswith(".")
+    }
+
+    merge_map: Dict[str, str] = {}
+    merge_reasons: Dict[str, str] = {}
+
+    for ns in existing_dirs:
+        norm = normalize_slug(ns)
+        if norm and norm != ns:
+            merge_map[ns] = norm
+            merge_reasons[ns] = "non-kebab directory name"
+
+    if args.scan_repos:
+        for src, dst, reason in discover_scan_repo_merges(
+            Path(args.scan_repos).expanduser().resolve(), existing_dirs
+        ):
+            target = merge_map.get(dst, dst)
+            merge_map[src] = target
+            merge_reasons[src] = reason
+
+    for spec in args.merge or []:
+        if ":" not in spec:
+            raise SystemExit(f"Invalid --merge spec '{spec}', expected SRC:DST")
+        src, dst = spec.split(":", 1)
+        src_clean = src.strip()
+        dst_clean = normalize_slug(dst.strip()) or dst.strip()
+        if src_clean and dst_clean and src_clean != dst_clean:
+            merge_map[src_clean] = dst_clean
+            merge_reasons[src_clean] = "explicit --merge"
+
+    def resolve_target_ns(ns: str) -> str:
+        cur = ns
+        seen: set[str] = set()
+        while cur in merge_map and cur not in seen:
+            seen.add(cur)
+            cur = merge_map[cur]
+        return cur
+
+    final_merges: List[Tuple[str, str, str]] = []
+    for src in sorted(existing_dirs):
+        dst = resolve_target_ns(src)
+        if dst != src:
+            final_merges.append((src, dst, merge_reasons.get(src, "normalized")))
+
+    # Collect all lesson files per source namespace and simulate / prepare outputs
+    # Track target_ns -> {filename -> (normalized_content, body_hash, keywords)}
+    planned_targets: Dict[str, Dict[str, Tuple[str, str]]] = {}
+    stats = {
+        "scanned": 0,
+        "repaired": 0,
+        "deduplicated": 0,
+        "collisions_renamed": 0,
+        "written": 0,
+        "removed_files": 0,
+    }
+
+    # Pre-load destination namespaces first so existing target filenames stay canonical
+    ordered_namespaces = sorted(
+        existing_dirs.keys(),
+        key=lambda ns: (1 if resolve_target_ns(ns) != ns else 0, ns),
+    )
+
+    body_hashes_by_target: Dict[str, set[str]] = {}
+    file_writes: List[Tuple[Path, str]] = []
+    files_to_remove: List[Path] = []
+
+    for src_ns in ordered_namespaces:
+        target_ns = resolve_target_ns(src_ns)
+        lessons_dir = existing_dirs[src_ns] / "lessons"
+        if not lessons_dir.is_dir():
+            continue
+        target_lessons_dir = archive_dir / target_ns / "lessons"
+        if target_ns not in planned_targets:
+            planned_targets[target_ns] = {}
+            body_hashes_by_target[target_ns] = set()
+
+        for path in sorted(lessons_dir.glob("*.md")):
+            stats["scanned"] += 1
+            raw = path.read_text(encoding="utf-8", errors="replace")
+            parsed = parse_lesson_document(raw, path.name)
+            strict_errs = validate_strict_frontmatter(raw)
+            needs_repair = bool(parsed["issues"] or strict_errs)
+
+            fm = serialize_lesson_frontmatter(parsed["meta"])
+            repaired_text = fm + "\n" + parsed["body"].lstrip("\n")
+            if needs_repair and repaired_text != raw:
+                stats["repaired"] += 1
+
+            body_norm = parsed["body"].strip()
+            body_hash = hashlib.sha256(body_norm.encode("utf-8")).hexdigest()
+
+            same_inode_dir = (
+                target_lessons_dir.parent.exists()
+                and os.path.samefile(existing_dirs[src_ns], target_lessons_dir.parent)
+            )
+            is_moving = (src_ns != target_ns) and not same_inode_dir
+            if is_moving and body_hash in body_hashes_by_target[target_ns]:
+                stats["deduplicated"] += 1
+                files_to_remove.append(path)
+                continue
+
+            body_hashes_by_target[target_ns].add(body_hash)
+            dest_name = path.name
+            if dest_name in planned_targets[target_ns]:
+                stats["collisions_renamed"] += 1
+                stem = Path(dest_name).stem
+                rev = 2
+                while f"{stem}-r{rev}.md" in planned_targets[target_ns]:
+                    rev += 1
+                dest_name = f"{stem}-r{rev}.md"
+
+            planned_targets[target_ns][dest_name] = (repaired_text, body_hash)
+            dest_path = target_lessons_dir / dest_name
+            if is_moving or repaired_text != raw or dest_name != path.name:
+                file_writes.append((dest_path, repaired_text))
+                stats["written"] += 1
+            if is_moving:
+                files_to_remove.append(path)
+                stats["removed_files"] += 1
+
+    print(f"Archive: {archive_dir}")
+    print(f"Scanned lessons: {stats['scanned']}")
+    print(f"Planned namespace merges ({len(final_merges)}):")
+    if final_merges:
+        for src, dst, reason in final_merges:
+            print(f"  {src} -> {dst} ({reason})")
+    else:
+        print("  (none)")
+    print(
+        f"Frontmatter repairs: {stats['repaired']} | "
+        f"Deduplicated: {stats['deduplicated']} | "
+        f"Collisions renamed: {stats['collisions_renamed']}"
+    )
+
+    if args.dry_run:
+        return 0
+
+    if args.backup_dir:
+        backup_path = Path(args.backup_dir).expanduser().resolve()
+        if backup_path.exists():
+            print(f"Backup directory already exists: {backup_path}", file=sys.stderr)
+            return 2
+        shutil.copytree(archive_dir, backup_path)
+        print(f"Backup written: {backup_path}")
+
+    for dest_path, content in file_writes:
+        atomic_write(dest_path, content)
+
+    written_set = {str(p.resolve()) for p, _ in file_writes}
+    for old_path in files_to_remove:
+        if str(old_path.resolve()) not in written_set and old_path.exists():
+            old_path.unlink()
+
+    for src_ns, dst_ns, _ in final_merges:
+        src_dir = existing_dirs[src_ns]
+        dst_dir = archive_dir / dst_ns
+        if src_dir.is_dir():
+            if dst_dir.exists() and os.path.samefile(src_dir, dst_dir):
+                tmp_rename = archive_dir / f".tmp_case_{dst_ns}"
+                os.rename(src_dir, tmp_rename)
+                os.rename(tmp_rename, dst_dir)
+            else:
+                remaining = [
+                    p for p in src_dir.rglob("*") if p.is_file() and p.name != ".DS_Store"
+                ]
+                if not remaining:
+                    shutil.rmtree(src_dir)
+
+    # Strict validation sweep over entire resulting archive
+    remaining_errors: List[str] = []
+    final_dirs = sorted(
+        d.name for d in archive_dir.iterdir() if d.is_dir() and not d.name.startswith(".")
+    )
+    for ns in final_dirs:
+        ldir = archive_dir / ns / "lessons"
+        if not ldir.is_dir():
+            continue
+        for md in sorted(ldir.glob("*.md")):
+            errs = validate_strict_frontmatter(md.read_text(encoding="utf-8", errors="replace"))
+            if errs:
+                remaining_errors.append(f"{md}: {', '.join(errs)}")
+
+    print(f"Final namespaces ({len(final_dirs)}): {', '.join(final_dirs)}")
+    print(f"Post-apply strict YAML errors: {len(remaining_errors)}")
+    for err in remaining_errors:
+        print(f"  ERROR: {err}", file=sys.stderr)
+    return 0 if not remaining_errors else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Mission Runner v3 control plane")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -822,6 +1653,41 @@ def build_parser() -> argparse.ArgumentParser:
     p_audit.add_argument("--verify-only", action="store_true")
     p_audit.add_argument("--keep-logs", action="store_true")
 
+    p_match = sub.add_parser("match-lessons", help="Match bilingual archive lessons")
+    p_match_target = p_match.add_mutually_exclusive_group(required=False)
+    p_match_target.add_argument("--slug", default="")
+    p_match_target.add_argument("--cwd", default=".")
+    p_match.add_argument("--query", required=True)
+    p_match.add_argument("--terms", default="")
+    p_match.add_argument("--limit", type=int, default=3)
+    p_match.add_argument("--archive-dir", default=str(DEFAULT_ARCHIVE_DIR))
+
+    p_distill = sub.add_parser("distill", help="Save a validated lesson to the archive")
+    p_distill.add_argument("--mission", default="")
+    p_distill.add_argument("--name", required=True)
+    p_distill.add_argument("--description", required=True)
+    p_distill.add_argument("--keywords", required=True)
+    p_distill.add_argument("--evidence", required=True)
+    p_distill_body = p_distill.add_mutually_exclusive_group(required=True)
+    p_distill_body.add_argument("--body")
+    p_distill_body.add_argument("--body-file")
+    p_distill.add_argument("--archive-dir", default=str(DEFAULT_ARCHIVE_DIR))
+    p_distill.add_argument("--ascii-only", action="store_true")
+
+    p_skip = sub.add_parser("skip-distill", help="Record skip decision if no trigger fired")
+    p_skip.add_argument("--mission", default="")
+    p_skip.add_argument("--reason", required=True)
+    p_skip.add_argument("--local-only", action="store_true")
+
+    p_doc = sub.add_parser("doctor-archive", help="Reconcile slugs and repair archive YAML")
+    p_doc.add_argument("--archive-dir", default=str(DEFAULT_ARCHIVE_DIR))
+    p_doc.add_argument("--scan-repos", default="")
+    p_doc.add_argument("--merge", action="append", default=[])
+    p_doc.add_argument("--backup-dir", default="")
+    p_doc_mode = p_doc.add_mutually_exclusive_group(required=True)
+    p_doc_mode.add_argument("--dry-run", action="store_true")
+    p_doc_mode.add_argument("--apply", action="store_true")
+
     return parser
 
 
@@ -846,6 +1712,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         "review-result": lambda: cmd_review_result(args),
         "check-criteria": lambda: cmd_check_criteria(args),
         "audit": lambda: cmd_audit(args),
+        "match-lessons": lambda: cmd_match_lessons(args),
+        "distill": lambda: cmd_distill(args),
+        "skip-distill": lambda: cmd_skip_distill(args),
+        "doctor-archive": lambda: cmd_doctor_archive(args),
     }
     return dispatch[args.command]()
 
